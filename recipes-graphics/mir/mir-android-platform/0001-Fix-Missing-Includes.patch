@@ -1,0 +1,24 @@
+diff --git a/src/platforms/android/include/native_window_report.h b/src/platforms/android/include/native_window_report.h
+index b89110f..a2c43e2 100644
+--- a/src/platforms/android/include/native_window_report.h
++++ b/src/platforms/android/include/native_window_report.h
+@@ -19,6 +19,7 @@
+ #ifndef MIR_GRAPHICS_ANDROID_NATIVE_WINDOW_REPORT_H_
+ #define MIR_GRAPHICS_ANDROID_NATIVE_WINDOW_REPORT_H_
+ #include <system/window.h>
++#include <string>
+ #include <vector>
+ #include <memory>
+ 
+diff --git a/src/platforms/android/server/hwc_loggers.cpp b/src/platforms/android/server/hwc_loggers.cpp
+index 1a190d3..e3041b2 100644
+--- a/src/platforms/android/server/hwc_loggers.cpp
++++ b/src/platforms/android/server/hwc_loggers.cpp
+@@ -17,6 +17,7 @@
+  */
+ 
+ #include "hwc_loggers.h"
++#include <array>
+ #include <iostream>
+ #include <iomanip>
+ 

@@ -1,0 +1,1130 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d078aea..702df9f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -41,8 +41,8 @@ set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE} CACHE STRING "${build_types}" FORCE)
+ # Enable cmake-gui to display a drop down list for CMAKE_BUILD_TYPE
+ set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "${build_types}")
+ 
+-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread -g -Werror -Wall -Wextra -fPIC")
+-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -g -std=c++14 -Werror -Wall -fno-strict-aliasing -Wnon-virtual-dtor -Wextra -fPIC")
++set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread -g -Werror -Wall -pedantic -Wextra -fPIC")
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -g -std=c++14 -Werror -Wall -fno-strict-aliasing -pedantic -Wnon-virtual-dtor -Wextra -fPIC")
+ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--as-needed")
+ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,--as-needed")
+ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--as-needed")
+@@ -134,36 +134,40 @@ include_directories (SYSTEM
+   ${Boost_INCLUDE_DIRS}
+ )
+ 
++#option(
++#  MIR_DISABLE_EPOLL_REACTOR
++#  "Disable boost::asio's epoll implementation and switch to a select-based reactor to account for ancient kernels on ppa builders."
++#  OFF
++#)
++#if(MIR_DISABLE_EPOLL_REACTOR)
++#add_definitions(
++#  -DBOOST_ASIO_DISABLE_EPOLL -DBOOST_ASIO_DISABLE_KQUEUE -DBOOST_ASIO_DISABLE_DEV_POLL
++#)
++#endif(MIR_DISABLE_EPOLL_REACTOR)
++
++#add_definitions(-DMESA_EGL_NO_X11_HEADERS)
++
+ set(
+   MIR_PLATFORM
+-  android;android-caf
++  android;
+   CACHE
+   STRING
+-  "a list of graphics backends to build (options are 'android' or android-caf)"
++  "a list of graphics backends to build (options are 'mesa-kms', 'mesa-x11', or 'eglstream-kms')"
+ )
+ 
++list(GET MIR_PLATFORM 0 MIR_TEST_PLATFORM)
++
+ foreach(platform IN LISTS MIR_PLATFORM)
+   if (platform STREQUAL "android")
+     set(MIR_BUILD_PLATFORM_ANDROID TRUE)
+   endif()
+-  if (platform STREQUAL "android-caf")
+-     set(MIR_BUILD_PLATFORM_ANDROID_CAF TRUE)
+-  endif()
+ endforeach(platform)
+ 
+-if (MIR_BUILD_PLATFORM_ANDROID OR MIR_BUILD_PLATFORM_ANDROID_CAF)
++if (MIR_BUILD_PLATFORM_ANDROID)
+   find_package(AndroidProperties REQUIRED)
+   find_package(LibHardware REQUIRED)
+ endif()
+ 
+-if (MIR_BUILD_PLATFORM_ANDROID)
+-  pkg_search_module(ANDROID_HEADERS REQUIRED android-headers-24)
+-endif()
+-
+-if (MIR_BUILD_PLATFORM_ANDROID_CAF)
+-  pkg_search_module(ANDROID_CAF_HEADERS REQUIRED android-headers-24-caf)
+-endif()
+-
+ option(MIR_ENABLE_TESTS "Build tests" ON)
+ 
+ find_package(EGL REQUIRED)
+@@ -229,6 +233,8 @@ set(MIR_GENERATED_INCLUDE_DIRECTORIES)
+ add_subdirectory(src/)
+ include_directories(${MIR_GENERATED_INCLUDE_DIRECTORIES})
+ 
++#add_subdirectory(examples/)
++#add_subdirectory(guides/)
+ add_subdirectory(cmake/)
+ 
+ if (MIR_ENABLE_TESTS)
+diff --git a/cmake/FindLibHardware.cmake b/cmake/FindLibHardware.cmake
+index be8cae0..b9b4100 100644
+--- a/cmake/FindLibHardware.cmake
++++ b/cmake/FindLibHardware.cmake
+@@ -6,9 +6,13 @@
+ 
+ INCLUDE(FindPackageHandleStandardArgs)
+ 
++find_package( PkgConfig )
++pkg_search_module(ANDROID_HEADERS REQUIRED android-headers)
++set(LIBHARDWARE_INCLUDE_DIRS ${ANDROID_HEADERS_INCLUDE_DIRS})
++
+ find_library(LIBHARDWARE_LIBRARY
+    NAMES         libhardware.so.2
+-                 libhardware.so
++                 libhardware.so 
+ )
+ 
+ find_library(LIBHYBRIS_COMMON_LIBRARY
+@@ -23,6 +27,6 @@ set(LIBHARDWARE_LIBRARIES ${LIBHARDWARE_LIBRARY} ${LIBHYBRIS_COMMON_LIBRARY})
+ find_package_handle_standard_args(LIBHARDWARE DEFAULT_MSG
+                                   LIBHARDWARE_LIBRARY)
+ 
+-mark_as_advanced(LIBHARDWARE_LIBRARY)
++mark_as_advanced(LIBHARDWARE_INCLUDE_DIR LIBHARDWARE_LIBRARY )
+ 
+ 
+diff --git a/debian/control b/debian/control
+index a29c8f0..e40e3b2 100644
+--- a/debian/control
++++ b/debian/control
+@@ -15,9 +15,7 @@ Build-Depends: cmake,
+                libprotobuf-dev,
+                pkg-config,
+                libgoogle-glog-dev,
+-               android-headers-24,
+-               android-headers-24-caf,
+-               android-headers,
++               android-headers-23,
+                libhardware-dev [i386 amd64 armhf arm64],
+                libandroid-properties-dev [i386 amd64 armhf arm64],
+                libgtest-dev,
+@@ -75,20 +73,6 @@ Description: Display server for Ubuntu - platform library for Android
+  Contains the shared libraries required for the Mir server to interact with
+  the hardware platform using the Android drivers.
+ 
+-Package: mir-platform-graphics-android-caf15
+-Section: libs
+-Architecture: i386 amd64 armhf arm64
+-Multi-Arch: same
+-Pre-Depends: ${misc:Pre-Depends}
+-Depends: ${misc:Depends},
+-         ${shlibs:Depends},
+-Description: Display server for Ubuntu - platform library for Android (caf)
+- Mir is a display server running on linux systems, with a focus on efficiency,
+- robust operation and a well-defined driver model.
+- .
+- Contains the shared libraries required for the Mir server to interact with
+- the hardware platform using the Android (caf) drivers.
+-
+ Package: mir-client-platform-android5
+ Section: libs
+ Architecture: i386 amd64 armhf arm64
+@@ -103,20 +87,6 @@ Description: Display server for Ubuntu - client platform library for Android
+  Contains the shared libraries required for the Mir clients to interact with
+  the underlying hardware platform using the Android drivers.
+ 
+-Package: mir-client-platform-android-caf5
+-Section: libs
+-Architecture: i386 amd64 armhf arm64
+-Multi-Arch: same
+-Pre-Depends: ${misc:Pre-Depends}
+-Depends: ${misc:Depends},
+-         ${shlibs:Depends}
+-Description: Display server for Ubuntu - client platform library for Android (caf)
+- Mir is a display server running on linux systems, with a focus on efficiency,
+- robust operation and a well-defined driver model.
+- .
+- Contains the shared libraries required for the Mir clients to interact with
+- the underlying hardware platform using the Android (caf) drivers.
+-
+ Package: mir-graphics-drivers-android
+ Section: libs
+ Architecture: i386 amd64 armhf arm64
+@@ -132,19 +102,3 @@ Description: Display server for Ubuntu - android driver metapackage
+  .
+  This package depends on a full set of graphics drivers for running Mir on top
+  of an existing Android driver stack.
+-
+-Package: mir-graphics-drivers-android-caf
+-Section: libs
+-Architecture: i386 amd64 armhf arm64
+-Multi-Arch: same
+-Pre-Depends: ${misc:Pre-Depends}
+-Depends: ${misc:Depends},
+-         mir-platform-graphics-android-caf15,
+-         mir-client-platform-android-caf5,
+-         mir-platform-input-evdev7,
+-Description: Display server for Ubuntu - android (caf) driver metapackage
+- Mir is a display server running on linux systems, with a focus on efficiency,
+- robust operation and a well-defined driver model.
+- .
+- This package depends on a full set of graphics drivers for running Mir on top
+- of an existing Android (caf) driver stack.
+diff --git a/debian/mir-client-platform-android-caf5.install b/debian/mir-client-platform-android-caf5.install
+deleted file mode 100644
+index 14974c0..0000000
+--- a/debian/mir-client-platform-android-caf5.install
++++ /dev/null
+@@ -1 +0,0 @@
+-usr/lib/*/mir/client-platform/android-caf.so.5
+diff --git a/debian/mir-platform-graphics-android-caf15.install b/debian/mir-platform-graphics-android-caf15.install
+deleted file mode 100644
+index 3744ce5..0000000
+--- a/debian/mir-platform-graphics-android-caf15.install
++++ /dev/null
+@@ -1 +0,0 @@
+-usr/lib/*/mir/server-platform/graphics-android-caf.so.15
+diff --git a/debian/rules b/debian/rules
+index e669968..18296a0 100755
+--- a/debian/rules
++++ b/debian/rules
+@@ -35,12 +35,12 @@ override_dh_auto_configure:
+ ifneq ($(filter armhf arm64,$(DEB_HOST_ARCH)),)
+ 	dh_auto_configure -- \
+ 	  $(COMMON_CONFIGURE_OPTIONS) \
+-	  -DMIR_PLATFORM=android\;android-caf
++	  -DMIR_PLATFORM=android
+ else
+ ifneq ($(filter amd64 i386,$(DEB_HOST_ARCH)),)
+ 	dh_auto_configure -- \
+ 	  $(COMMON_CONFIGURE_OPTIONS) \
+-	  -DMIR_PLATFORM=android\;android-caf
++	  -DMIR_PLATFORM=android
+ else
+ 	dh_auto_configure -- \
+ 	  $(COMMON_CONFIGURE_OPTIONS) \
+diff --git a/src/platforms/android/CMakeLists.txt b/src/platforms/android/CMakeLists.txt
+index 3862ba7..9d2ca28 100644
+--- a/src/platforms/android/CMakeLists.txt
++++ b/src/platforms/android/CMakeLists.txt
+@@ -1,4 +1,5 @@
+ add_definitions(-DANDROID)
++include_directories(SYSTEM ${LIBHARDWARE_INCLUDE_DIRS})
+ include_directories(
+     ${server_common_include_dirs}
+     include/
+diff --git a/src/platforms/android/client/CMakeLists.txt b/src/platforms/android/client/CMakeLists.txt
+index c2e2dd9..a012f69 100644
+--- a/src/platforms/android/client/CMakeLists.txt
++++ b/src/platforms/android/client/CMakeLists.txt
+@@ -1,90 +1,42 @@
+-set(symbol_map ${CMAKE_CURRENT_SOURCE_DIR}/symbols.map)
+-
+-if (MIR_BUILD_PLATFORM_ANDROID)
+-  add_library(mirclientplatformandroidobjects OBJECT
+-    buffer.cpp
+-    android_client_buffer_factory.cpp
+-    gralloc_registrar.cpp
+-    android_client_platform.cpp
+-    client_platform_factory.cpp
+-    egl_native_surface_interpreter.cpp
+-    android_native_display_container.cpp
+-  )
+-
+-  target_compile_definitions(mirclientplatformandroidobjects PRIVATE ANDROID)
+-  target_include_directories(mirclientplatformandroidobjects 
+-    PRIVATE ${client_common_include_dirs}
+-    SYSTEM PRIVATE ${ANDROID_HEADERS_INCLUDE_DIRS}
+-    )
+-  add_library(mirclientplatformandroid MODULE
+-    $<TARGET_OBJECTS:mirclientplatformandroidobjects>
+-  )
+-
+-  set_target_properties(
+-    mirclientplatformandroid PROPERTIES
+-    OUTPUT_NAME android
+-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/client-modules
+-    PREFIX ""
+-    SUFFIX ".so.${MIR_CLIENT_PLATFORM_ABI}"
+-    LINK_FLAGS "-Wl,--version-script,${symbol_map}"
+-    LINK_DEPENDS ${symbol_map}
+-  )
++include_directories(${client_common_include_dirs})
+ 
+-  target_link_libraries(mirclientplatformandroid
+-    client_platform_common
+-    mirsharedandroid-static
+-    ${MIRCORE_LDFLAGS}
+-    ${MIRPLATFORM_LDFLAGS}
+-    ${MIRCLIENT_LDFLAGS}
+-    dl
+-    ${LIBHARDWARE_LIBRARIES}
+-    ${EGL_LDFLAGS} ${EGL_LIBRARIES}
+-  )
++add_definitions(-DANDROID)
+ 
+-  install(TARGETS mirclientplatformandroid LIBRARY DESTINATION ${MIR_CLIENT_PLATFORM_PATH})
+-endif()
+-
+-if (MIR_BUILD_PLATFORM_ANDROID_CAF)
+-  add_library(mirclientplatformandroidcafobjects OBJECT
+-    buffer.cpp
+-    android_client_buffer_factory.cpp
+-    gralloc_registrar.cpp
+-    android_client_platform.cpp
+-    client_platform_factory.cpp
+-    egl_native_surface_interpreter.cpp
+-    android_native_display_container.cpp
+-  )
+-
+-  target_include_directories(mirclientplatformandroidcafobjects 
+-      SYSTEM PRIVATE ${ANDROID_CAF_HEADERS_INCLUDE_DIRS} 
+-      PRIVATE ${client_common_include_dirs})
+-  target_compile_definitions(mirclientplatformandroidcafobjects 
+-      PRIVATE ANDROID_CAF=1
+-      PRIVATE ANDROID)
+-  add_library(mirclientplatformandroidcaf MODULE
+-    $<TARGET_OBJECTS:mirclientplatformandroidcafobjects>
+-  )
+- 
+-  set_target_properties(
+-    mirclientplatformandroidcaf PROPERTIES
+-    OUTPUT_NAME android-caf
+-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/client-modules
+-    PREFIX ""
+-    SUFFIX ".so.${MIR_CLIENT_PLATFORM_ABI}"
+-    LINK_FLAGS "-Wl,--version-script,${symbol_map}"
+-    LINK_DEPENDS ${symbol_map}
+-  )
+-
+-  target_link_libraries(mirclientplatformandroidcaf
+-    client_platform_common
+-    mirsharedandroid-static
+-    ${MIRCORE_LDFLAGS}
+-    ${MIRPLATFORM_LDFLAGS}
+-    ${MIRCLIENT_LDFLAGS}
+-    dl
+-    ${LIBHARDWARE_LIBRARIES}
+-    ${EGL_LDFLAGS} ${EGL_LIBRARIES}
+-  )
++set(symbol_map ${CMAKE_CURRENT_SOURCE_DIR}/symbols.map)
+ 
+-  install(TARGETS mirclientplatformandroidcaf LIBRARY DESTINATION ${MIR_CLIENT_PLATFORM_PATH})
+-endif()
++add_library(mirclientplatformandroidobjects OBJECT
++  buffer.cpp
++  android_client_buffer_factory.cpp
++  gralloc_registrar.cpp
++  android_client_platform.cpp
++  client_platform_factory.cpp
++  egl_native_surface_interpreter.cpp
++  android_native_display_container.cpp
++)
++
++add_library(mirclientplatformandroid MODULE
++  $<TARGET_OBJECTS:mirclientplatformandroidobjects>
++)
++
++set_target_properties(
++  mirclientplatformandroid PROPERTIES
++  OUTPUT_NAME android
++  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/client-modules
++  PREFIX ""
++  SUFFIX ".so.${MIR_CLIENT_PLATFORM_ABI}"
++  LINK_FLAGS "-Wl,--version-script,${symbol_map}"
++  LINK_DEPENDS ${symbol_map}
++)
++
++target_link_libraries(mirclientplatformandroid
++  client_platform_common
++  mirsharedandroid-static
++  ${MIRCORE_LDFLAGS}
++  ${MIRPLATFORM_LDFLAGS}
++  ${MIRCLIENT_LDFLAGS}
++  dl
++  ${LIBHARDWARE_LIBRARIES}
++  ${EGL_LDFLAGS} ${EGL_LIBRARIES}
++)
++
++install(TARGETS mirclientplatformandroid LIBRARY DESTINATION ${MIR_CLIENT_PLATFORM_PATH})
+diff --git a/src/platforms/android/client/client_platform_factory.cpp b/src/platforms/android/client/client_platform_factory.cpp
+index b82121e..eb43952 100644
+--- a/src/platforms/android/client/client_platform_factory.cpp
++++ b/src/platforms/android/client/client_platform_factory.cpp
+@@ -51,9 +51,5 @@ is_appropriate_module(mcl::ClientContext* context)
+     MirModuleProperties server_graphics_module;
+     context->populate_graphics_module(server_graphics_module);
+ 
+-#ifdef ANDROID_CAF
+-    return (strncmp("mir:android-caf", server_graphics_module.name, strlen("mir:android-caf")) == 0);
+-#else
+     return (strncmp("mir:android", server_graphics_module.name, strlen("mir:android")) == 0);
+-#endif
+ }
+diff --git a/src/platforms/android/common/CMakeLists.txt b/src/platforms/android/common/CMakeLists.txt
+index 8a50c73..0090e0a 100644
+--- a/src/platforms/android/common/CMakeLists.txt
++++ b/src/platforms/android/common/CMakeLists.txt
+@@ -1,3 +1,10 @@
++include_directories(
++    ${server_common_include_dirs}
++    include/
++)
++
++add_definitions( -DANDROID )
++
+ add_library(
+   mirsharedandroid-static STATIC
+ 
+@@ -9,9 +16,3 @@ add_library(
+   egl_sync_extensions.cpp
+   native_window_report.cpp
+ )
+-target_compile_definitions(mirsharedandroid-static PUBLIC ANDROID)
+-target_include_directories(mirsharedandroid-static PUBLIC
+-  PUBLIC ${server_common_include_dirs}
+-         include/
+-         SYSTEM PRIVATE ${ANDROID_HEADERS_INCLUDE_DIRS} # for linux/sync.h
+-  )
+diff --git a/src/platforms/android/server/CMakeLists.txt b/src/platforms/android/server/CMakeLists.txt
+index 1f301d0..dffd6b0 100644
+--- a/src/platforms/android/server/CMakeLists.txt
++++ b/src/platforms/android/server/CMakeLists.txt
+@@ -1,159 +1,75 @@
++include_directories(
++    ${PROJECT_SOURCE_DIR}/src/include/gl
++)
++
++include_directories(
++    ${EGL_INCLUDE_DIRS}
++    ${GLESv2_INCLUDE_DIRS}
++    ${ANDROID_PROPERTIES_INCLUDE_DIRS}
++)
++
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive")
++
++add_library(mirplatformgraphicsandroidobjects OBJECT
++  platform.cpp
++  graphic_buffer_allocator.cpp
++  buffer.cpp
++  display.cpp
++  display_group.cpp
++  display_configuration.cpp
++  display_buffer.cpp
++  hal_component_factory.cpp
++  hwc_layerlist.cpp
++  hwc_layers.cpp
++  hwc_fb_device.cpp
++  hwc_loggers.cpp
++  hwc_device.cpp
++  gralloc_module.cpp
++  server_render_window.cpp
++  resource_factory.cpp
++  framebuffers.cpp
++  fb_device.cpp
++  interpreter_cache.cpp
++  gl_context.cpp
++  device_quirks.cpp
++  real_hwc_wrapper.cpp
++  hwc_fallback_gl_renderer.cpp
++  ipc_operations.cpp
++  hwc_blanking_control.cpp
++  egl_sync_factory.cpp
++  virtual_output.cpp
++)
++
+ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/symbols.map.in
+     ${CMAKE_CURRENT_BINARY_DIR}/symbols.map)
+ set(symbol_map ${CMAKE_CURRENT_BINARY_DIR}/symbols.map)
+ 
+-
+-if (MIR_BUILD_PLATFORM_ANDROID)
+-  add_library(mirplatformgraphicsandroidobjects OBJECT
+-    platform.cpp
+-    graphic_buffer_allocator.cpp
+-    buffer.cpp
+-    display.cpp
+-    display_group.cpp
+-    display_configuration.cpp
+-    display_buffer.cpp
+-    hal_component_factory.cpp
+-    hwc_layerlist.cpp
+-    hwc_layers.cpp
+-    hwc_fb_device.cpp
+-    hwc_loggers.cpp
+-    hwc_device.cpp
+-    gralloc_module.cpp
+-    server_render_window.cpp
+-    resource_factory.cpp
+-    framebuffers.cpp
+-    fb_device.cpp
+-    interpreter_cache.cpp
+-    gl_context.cpp
+-    device_quirks.cpp
+-    real_hwc_wrapper.cpp
+-    hwc_fallback_gl_renderer.cpp
+-    ipc_operations.cpp
+-    hwc_blanking_control.cpp
+-    egl_sync_factory.cpp
+-    virtual_output.cpp
+-  )
+-
+-  target_include_directories(mirplatformgraphicsandroidobjects PUBLIC
+-      ${PROJECT_SOURCE_DIR}/src/include/gl
+-  )
+-
+-  target_include_directories(mirplatformgraphicsandroidobjects PRIVATE SYSTEM
+-      ${EGL_INCLUDE_DIRS}
+-      ${GLESv2_INCLUDE_DIRS}
+-      ${ANDROID_PROPERTIES_INCLUDE_DIRS}
+-      ${ANDROID_HEADERS_INCLUDE_DIRS}
+-      ${WAYLAND_SERVER_INCLUDE_DIRS}
+-  )
+-
+-  target_compile_options(mirplatformgraphicsandroidobjects PRIVATE -fpermissive)
+-
+-  add_library(mirplatformgraphicsandroid SHARED
+-    $<TARGET_OBJECTS:mirplatformgraphicsandroidobjects>
+-    $<TARGET_OBJECTS:mirgl>
+-  )
+-
+-  target_link_libraries(
+-    mirplatformgraphicsandroid
+-
+-    mirsharedandroid-static
+-    ${MIRPLATFORM_LDFLAGS}
+-    ${MIRCORE_LDFLAGS}
+-    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+-    ${LIBHARDWARE_LIBRARIES}
+-    ${EGL_LDFLAGS} ${EGL_LIBRARIES}
+-    ${GLESv2_LDFLAGS} ${GLESv2_LIBRARIES}
+-    ${ANDROID_PROPERTIES_LDFLAGS}
+-    ${WAYLAND_SERVER_LDFLAGS} ${WAYLAND_SERVER_LIBRARIES}
+-  )
+-
+-  set_target_properties(
+-    mirplatformgraphicsandroid PROPERTIES
+-    OUTPUT_NAME graphics-android
+-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/server-modules
+-    PREFIX ""
+-    SUFFIX ".so.${MIR_SERVER_GRAPHICS_PLATFORM_ABI}"
+-    LINK_FLAGS "-Wl,--exclude-libs=ALL -Wl,--version-script,${symbol_map}"
+-    LINK_DEPENDS ${symbol_map}
+-  )
+-
+-  install(TARGETS mirplatformgraphicsandroid LIBRARY DESTINATION ${MIR_SERVER_PLATFORM_PATH})
+-endif()
+-
+-if (MIR_BUILD_PLATFORM_ANDROID_CAF)
+-  add_library(mirplatformgraphicsandroidcafobjects OBJECT
+-    platform.cpp
+-    graphic_buffer_allocator.cpp
+-    buffer.cpp
+-    display.cpp
+-    display_group.cpp
+-    display_configuration.cpp
+-    display_buffer.cpp
+-    hal_component_factory.cpp
+-    hwc_layerlist.cpp
+-    hwc_layers.cpp
+-    hwc_fb_device.cpp
+-    hwc_loggers.cpp
+-    hwc_device.cpp
+-    gralloc_module.cpp
+-    server_render_window.cpp
+-    resource_factory.cpp
+-    framebuffers.cpp
+-    fb_device.cpp
+-    interpreter_cache.cpp
+-    gl_context.cpp
+-    device_quirks.cpp
+-    real_hwc_wrapper.cpp
+-    hwc_fallback_gl_renderer.cpp
+-    ipc_operations.cpp
+-    hwc_blanking_control.cpp
+-    egl_sync_factory.cpp
+-    virtual_output.cpp
+-  )
+-
+-  target_include_directories(mirplatformgraphicsandroidcafobjects PUBLIC
+-      ${PROJECT_SOURCE_DIR}/src/include/gl
+-  )
+-
+-  target_include_directories(mirplatformgraphicsandroidcafobjects SYSTEM PRIVATE
+-      ${EGL_INCLUDE_DIRS}
+-      ${GLESv2_INCLUDE_DIRS}
+-      ${ANDROID_CAF_HEADERS_INCLUDE_DIRS}
+-      ${ANDROID_PROPERTIES_INCLUDE_DIRS}
+-      ${WAYLAND_SERVER_INCLUDE_DIRS}
+-  )
+-
+-  target_compile_options(mirplatformgraphicsandroidcafobjects PRIVATE -fpermissive)
+-  target_compile_definitions(mirplatformgraphicsandroidcafobjects PRIVATE ANDROID_CAF=1)
+-
+-  add_library(mirplatformgraphicsandroidcaf SHARED
+-    $<TARGET_OBJECTS:mirplatformgraphicsandroidcafobjects>
+-    $<TARGET_OBJECTS:mirgl>
+-  )
+-
+-  target_link_libraries(
+-    mirplatformgraphicsandroidcaf
+-
+-    mirsharedandroid-static
+-    ${MIRPLATFORM_LDFLAGS}
+-    ${MIRCORE_LDFLAGS}
+-    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+-    ${LIBHARDWARE_LIBRARIES}
+-    ${EGL_LDFLAGS} ${EGL_LIBRARIES}
+-    ${GLESv2_LDFLAGS} ${GLESv2_LIBRARIES}
+-    ${ANDROID_PROPERTIES_LDFLAGS}
+-    ${WAYLAND_SERVER_LDFLAGS} ${WAYLAND_SERVER_LIBRARIES}
+-  )
+-
+-  set_target_properties(
+-    mirplatformgraphicsandroidcaf PROPERTIES
+-    OUTPUT_NAME graphics-android-caf
+-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/server-modules
+-    PREFIX ""
+-    SUFFIX ".so.${MIR_SERVER_GRAPHICS_PLATFORM_ABI}"
+-    LINK_FLAGS "-Wl,--exclude-libs=ALL -Wl,--version-script,${symbol_map}"
+-    LINK_DEPENDS ${symbol_map}
+-  )
+-
+-  install(TARGETS mirplatformgraphicsandroidcaf LIBRARY DESTINATION ${MIR_SERVER_PLATFORM_PATH})
+-endif()
++add_library(mirplatformgraphicsandroid SHARED
++  $<TARGET_OBJECTS:mirplatformgraphicsandroidobjects>
++  $<TARGET_OBJECTS:mirgl>
++)
++
++target_link_libraries(
++  mirplatformgraphicsandroid
++
++  mirsharedandroid-static
++  ${MIRPLATFORM_LDFLAGS}
++  ${MIRCORE_LDFLAGS}
++  ${Boost_PROGRAM_OPTIONS_LIBRARY}
++  ${LIBHARDWARE_LIBRARIES}
++  ${EGL_LDFLAGS} ${EGL_LIBRARIES}
++  ${GLESv2_LDFLAGS} ${GLESv2_LIBRARIES}
++  ${ANDROID_PROPERTIES_LDFLAGS}
++)
++
++set_target_properties(
++  mirplatformgraphicsandroid PROPERTIES
++  OUTPUT_NAME graphics-android
++  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/server-modules
++  PREFIX ""
++  SUFFIX ".so.${MIR_SERVER_GRAPHICS_PLATFORM_ABI}"
++  LINK_FLAGS "-Wl,--exclude-libs=ALL -Wl,--version-script,${symbol_map}"
++  LINK_DEPENDS ${symbol_map}
++)
++
++install(TARGETS mirplatformgraphicsandroid LIBRARY DESTINATION ${MIR_SERVER_PLATFORM_PATH})
+diff --git a/src/platforms/android/server/display_configuration.cpp b/src/platforms/android/server/display_configuration.cpp
+index 842b76d..b6eb9b9 100644
+--- a/src/platforms/android/server/display_configuration.cpp
++++ b/src/platforms/android/server/display_configuration.cpp
+@@ -27,9 +27,6 @@ enum DisplayIds
+ {
+     primary_id,
+     external_id,
+-#ifdef ANDROID_CAF
+-    tertiary_id,
+-#endif
+     virtual_id,
+     max_displays
+ };
+@@ -76,53 +73,6 @@ mg::DisplayConfigurationOutput make_virtual_config()
+         {}
+     };
+ }
+-
+-#ifdef ANDROID_CAF
+-mg::DisplayConfigurationOutput make_tertiary_config()
+-{
+-    auto const name = mga::DisplayName::tertiary;
+-    double const vrefresh_hz{60.0};
+-    geom::Size const mm_size{660, 370};
+-    auto const display_format = mir_pixel_format_argb_8888;
+-    geom::Point const origin{0,0};
+-    auto const external_mode = mir_power_mode_off;
+-    size_t const preferred_format_index{0};
+-    size_t const preferred_mode_index{0};
+-    bool const connected{false};
+-    auto const type = mg::DisplayConfigurationOutputType::unknown;
+-    auto const form_factor = mir_form_factor_monitor;
+-    float const scale{1.0f};
+-    std::vector<mg::DisplayConfigurationMode> external_modes;
+-    auto const subpixel_arrangement = mir_subpixel_arrangement_unknown;
+-    external_modes.emplace_back(mg::DisplayConfigurationMode{{1920,1080}, vrefresh_hz});
+-
+-    return {
+-        as_output_id(name),
+-        mg::DisplayConfigurationCardId{0},
+-        type,
+-        {display_format},
+-        external_modes,
+-        preferred_mode_index,
+-        mm_size,
+-        connected,
+-        connected,
+-        origin,
+-        preferred_format_index,
+-        display_format,
+-        external_mode,
+-        mir_orientation_normal,
+-        scale,
+-        form_factor,
+-        subpixel_arrangement,
+-        {},
+-        mir_output_gamma_unsupported,
+-        {},
+-        {}
+-
+-    };
+-}
+-#endif
+-
+ }
+ 
+ mga::DisplayConfiguration::DisplayConfiguration(
+@@ -132,52 +82,25 @@ mga::DisplayConfiguration::DisplayConfiguration(
+     MirPowerMode external_mode) :
+     DisplayConfiguration(primary_config, primary_mode,
+                          external_config, external_mode,
+-#ifdef ANDROID_CAF
+-                         make_tertiary_config(), mir_power_mode_off,
+-#endif
+                          make_virtual_config())
+ {
+ }
+ 
+-#ifdef ANDROID_CAF
+-mga::DisplayConfiguration::DisplayConfiguration(
+-    mg::DisplayConfigurationOutput primary_config,
+-    MirPowerMode primary_mode,
+-    mg::DisplayConfigurationOutput external_config,
+-    MirPowerMode external_mode,
+-    mg::DisplayConfigurationOutput virt_config) :
+-    DisplayConfiguration(primary_config, primary_mode,
+-                         external_config, external_mode,
+-                         make_tertiary_config(), mir_power_mode_off,
+-                         virt_config)
+-{}
+-#endif
+-
+ mga::DisplayConfiguration::DisplayConfiguration(
+     mg::DisplayConfigurationOutput primary_config,
+     MirPowerMode primary_mode,
+     mg::DisplayConfigurationOutput external_config,
+     MirPowerMode external_mode,
+-#ifdef ANDROID_CAF
+-    mg::DisplayConfigurationOutput tertiary_config,
+-    MirPowerMode tertiary_mode,
+-#endif
+     mg::DisplayConfigurationOutput virt_config) :
+     configurations{
+         {std::move(primary_config),
+         std::move(external_config),
+-#ifdef ANDROID_CAF
+-        std::move(tertiary_config),
+-#endif
+         std::move(virt_config)}
+     },
+     card{mg::DisplayConfigurationCardId{0}, max_displays}
+ {
+     primary().power_mode = primary_mode;
+     external().power_mode = external_mode;
+-#ifdef ANDROID_CAF
+-    tertiary().power_mode = tertiary_mode;
+-#endif
+ }
+ 
+ mga::DisplayConfiguration::DisplayConfiguration(DisplayConfiguration const& other) :
+@@ -232,13 +155,6 @@ mg::DisplayConfigurationOutput& mga::DisplayConfiguration::external()
+     return configurations[external_id];
+ }
+ 
+-#ifdef ANDROID_CAF
+-mg::DisplayConfigurationOutput& mga::DisplayConfiguration::tertiary()
+-{
+-    return configurations[tertiary_id];
+-}
+-#endif
+-
+ mg::DisplayConfigurationOutput& mga::DisplayConfiguration::virt()
+ {
+     return configurations[virtual_id];
+@@ -247,11 +163,7 @@ mg::DisplayConfigurationOutput& mga::DisplayConfiguration::virt()
+ mg::DisplayConfigurationOutput& mga::DisplayConfiguration::operator[](mg::DisplayConfigurationOutputId const& disp_id)
+ {
+     auto id = disp_id.as_value() - 1;
+-#ifdef ANDROID_CAF
+-    if (id != primary_id && id != external_id && id != tertiary_id && id != virtual_id)
+-#else
+     if (id != primary_id && id != external_id && id != virtual_id)
+-#endif
+         BOOST_THROW_EXCEPTION(std::invalid_argument("invalid display id"));
+     return configurations[id];
+ }
+diff --git a/src/platforms/android/server/display_configuration.h b/src/platforms/android/server/display_configuration.h
+index 2479509..f3fcbce 100644
+--- a/src/platforms/android/server/display_configuration.h
++++ b/src/platforms/android/server/display_configuration.h
+@@ -61,17 +61,6 @@ public:
+                          DisplayConfigurationOutput external,
+                          MirPowerMode external_mode,
+                          DisplayConfigurationOutput virt_config);
+-#ifdef ANDROID_CAF
+-    DisplayConfiguration(DisplayConfigurationOutput primary,
+-                         MirPowerMode primary_mode,
+-                         DisplayConfigurationOutput external,
+-                         MirPowerMode external_mode,
+-                         DisplayConfigurationOutput tertiary,
+-                         MirPowerMode tertiary_mode,
+-                         DisplayConfigurationOutput virt_config);
+-#endif
+-
+-
+ 
+     DisplayConfiguration(DisplayConfiguration const& other);
+     DisplayConfiguration& operator=(DisplayConfiguration const& other);
+@@ -85,9 +74,6 @@ public:
+ 
+     DisplayConfigurationOutput& primary();
+     DisplayConfigurationOutput& external();
+-#ifdef ANDROID_CAF
+-    DisplayConfigurationOutput& tertiary();
+-#endif
+     DisplayConfigurationOutput& virt();
+     DisplayConfigurationOutput& operator[](DisplayConfigurationOutputId const&);
+ 
+@@ -97,11 +83,7 @@ public:
+     void disable_virtual_output();
+ 
+ private:
+-#ifdef ANDROID_CAF
+-    std::array<DisplayConfigurationOutput, 4> configurations;
+-#else
+     std::array<DisplayConfigurationOutput, 3> configurations;
+-#endif
+     DisplayConfigurationCard card;
+ };
+ 
+diff --git a/src/platforms/android/server/display_name.h b/src/platforms/android/server/display_name.h
+index 32fc54a..6b01e04 100644
+--- a/src/platforms/android/server/display_name.h
++++ b/src/platforms/android/server/display_name.h
+@@ -33,9 +33,6 @@ enum class DisplayName
+ {
+     primary = HWC_DISPLAY_PRIMARY,
+     external = HWC_DISPLAY_EXTERNAL,
+-#ifdef ANDROID_CAF
+-    tertiary = HWC_DISPLAY_TERTIARY,
+-#endif
+     virt = HWC_DISPLAY_VIRTUAL
+ };
+ 
+diff --git a/src/platforms/android/server/hwc_device.cpp b/src/platforms/android/server/hwc_device.cpp
+index 109842b..98b85a2 100644
+--- a/src/platforms/android/server/hwc_device.cpp
++++ b/src/platforms/android/server/hwc_device.cpp
+@@ -87,18 +87,14 @@ bool mga::HwcDevice::buffer_is_onscreen(mg::Buffer const& buffer) const
+ 
+ void mga::HwcDevice::commit(std::list<DisplayContents> const& contents)
+ {
+-#ifdef ANDROID_CAF
+-    std::array<hwc_display_contents_1*, HWC_NUM_DISPLAY_TYPES> lists{{ nullptr, nullptr, nullptr, nullptr }};
+-#else
+     std::array<hwc_display_contents_1*, HWC_NUM_DISPLAY_TYPES> lists{{ nullptr, nullptr, nullptr }};
+-#endif
+     std::vector<std::shared_ptr<mg::Buffer>> next_onscreen_overlay_buffers;
+ 
+     for (auto& content : contents)
+     {
+         if (content.name == mga::DisplayName::primary)
+             lists[HWC_DISPLAY_PRIMARY] = content.list.native_list();
+-        else if (content.name == mga::DisplayName::external)
++        else if (content.name == mga::DisplayName::external) 
+             lists[HWC_DISPLAY_EXTERNAL] = content.list.native_list();
+ 
+         content.list.setup_fb(content.context.last_rendered_buffer());
+diff --git a/src/platforms/android/server/ipc_operations.cpp b/src/platforms/android/server/ipc_operations.cpp
+index 2ab3cfb..d2de296 100644
+--- a/src/platforms/android/server/ipc_operations.cpp
++++ b/src/platforms/android/server/ipc_operations.cpp
+@@ -77,11 +77,7 @@ void mga::IpcOperations::unpack_buffer(BufferIpcMessage&, Buffer const&) const
+ namespace
+ {
+ mir::ModuleProperties const properties = {
+-#ifdef ANDROID_CAF
+-    "mir:android-caf",
+-#else
+     "mir:android",
+-#endif
+     MIR_VERSION_MAJOR,
+     MIR_VERSION_MINOR,
+     MIR_VERSION_MICRO,
+diff --git a/src/platforms/android/server/platform.cpp b/src/platforms/android/server/platform.cpp
+index 5c21d73..37b9c3a 100644
+--- a/src/platforms/android/server/platform.cpp
++++ b/src/platforms/android/server/platform.cpp
+@@ -42,7 +42,6 @@
+ #include <boost/throw_exception.hpp>
+ #include <stdexcept>
+ #include <mutex>
+-#include <string.h>
+ 
+ namespace mg = mir::graphics;
+ namespace mga = mir::graphics::android;
+@@ -57,11 +56,6 @@ char const* const log_opt_value = "log";
+ char const* const off_opt_value = "off";
+ char const* const fb_native_window_report_opt = "report-fb-native-window";
+ 
+-bool force_caf_version() {
+-    char value[PROP_VALUE_MAX] = "";
+-    return 0 != ::property_get("ro.build.qti_bsp.abi", value, nullptr);
+-}
+-
+ #ifdef ANDROID_CAF
+ bool force_vanilla_version() {
+     char value[PROP_VALUE_MAX] = "";
+@@ -382,33 +376,15 @@ mg::PlatformPriority probe_graphics_platform(std::shared_ptr<mir::ConsoleService
+     int err;
+     hw_module_t const* hw_module;
+ 
+-    err = hw_get_module(HWC_HARDWARE_MODULE_ID, &hw_module);
+-    if (err < 0) return mg::PlatformPriority::unsupported;
++    err = hw_get_module(GRALLOC_HARDWARE_MODULE_ID, &hw_module);
+ 
+-#ifdef ANDROID_CAF
+-    // LAZY HACK to check for qcom hardware
+-    if (force_vanilla_version())
+-	return mg::PlatformPriority::unsupported;
+-    auto version = get_android_version();
+-    if (force_caf_version() ||
+-        (strcmp(hw_module->author, "CodeAurora Forum") == 0 && std::get<0>(version) >= 7))
+-        return static_cast<mg::PlatformPriority>(mg::PlatformPriority::best + 1);
+-    return mg::PlatformPriority::unsupported;
+-#else
+-    if (force_caf_version())
+-	return mg::PlatformPriority::unsupported;
+-    return mg::PlatformPriority::best;
+-#endif
++    return err < 0 ? mg::PlatformPriority::unsupported : mg::PlatformPriority::best;
+ }
+ 
+ namespace
+ {
+ mir::ModuleProperties const description = {
+-#ifdef ANDROID_CAF
+-    "mir:android-caf",
+-#else
+     "mir:android",
+-#endif
+     MIR_VERSION_MAJOR,
+     MIR_VERSION_MINOR,
+     MIR_VERSION_MICRO,
+diff --git a/src/platforms/android/server/real_hwc_wrapper.cpp b/src/platforms/android/server/real_hwc_wrapper.cpp
+index 47c394b..4dbef02 100644
+--- a/src/platforms/android/server/real_hwc_wrapper.cpp
++++ b/src/platforms/android/server/real_hwc_wrapper.cpp
+@@ -49,10 +49,6 @@ mga::DisplayName display_name(int raw_name)
+             return mga::DisplayName::primary;
+         case HWC_DISPLAY_EXTERNAL:
+             return mga::DisplayName::external;
+-#ifdef ANDROID_CAF
+-        case HWC_DISPLAY_TERTIARY:
+-            return mga::DisplayName::tertiary;
+-#endif
+         case HWC_DISPLAY_VIRTUAL:
+             return mga::DisplayName::virt;
+     }
+diff --git a/src/platforms/android/server/server_render_window.cpp b/src/platforms/android/server/server_render_window.cpp
+index a9aa663..2b6f9cf 100644
+--- a/src/platforms/android/server/server_render_window.cpp
++++ b/src/platforms/android/server/server_render_window.cpp
+@@ -94,19 +94,13 @@ int mga::ServerRenderWindow::driver_requests_info(int key) const
+             return 0;
+         case NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS:
+             return 1;
++        case NATIVE_WINDOW_BUFFER_AGE:
++            // 0 is a safe fallback since no buffer tracking is in place
++            return 0;
+         case NATIVE_WINDOW_CONCRETE_TYPE:
+             return NATIVE_WINDOW_FRAMEBUFFER;
+         case NATIVE_WINDOW_CONSUMER_USAGE_BITS:
+             return GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_HW_FB;
+-        case NATIVE_WINDOW_BUFFER_AGE:
+-            // 0 is a safe fallback since no buffer tracking is in place
+-            return 0;
+-        case NATIVE_WINDOW_LAST_QUEUE_DURATION:
+-            return 20;
+-        case NATIVE_WINDOW_LAST_DEQUEUE_DURATION:
+-            return 20;
+-        case NATIVE_WINDOW_DEFAULT_DATASPACE:
+-            return HAL_DATASPACE_V0_SRGB_LINEAR;
+         default:
+             {
+             std::stringstream sstream;
+diff --git a/src/platforms/android/utils/CMakeLists.txt b/src/platforms/android/utils/CMakeLists.txt
+index ea2875a..ca77d91 100644
+--- a/src/platforms/android/utils/CMakeLists.txt
++++ b/src/platforms/android/utils/CMakeLists.txt
+@@ -7,9 +7,14 @@ list(
+ add_definitions(-DMIR_SERVER_GRAPHICS_PLATFORM_VERSION="${MIR_SERVER_GRAPHICS_PLATFORM_VERSION}")
+ 
+ include_directories(
++  ${PROJECT_SOURCE_DIR}/include/server
++  ${PROJECT_SOURCE_DIR}/include/client
++  ${PROJECT_SOURCE_DIR}/include/platform
+   ${PROJECT_SOURCE_DIR}/src/include/common
++  ${PROJECT_SOURCE_DIR}/include/test
+   ${PROJECT_SOURCE_DIR}/tests/include
+   ${PROJECT_SOURCE_DIR}/src/include/server
++  ${PROJECT_SOURCE_DIR}/examples
+   ${PROJECT_SOURCE_DIR}/src/platforms/android/include
+ )
+ 
+@@ -26,20 +31,14 @@ target_link_libraries(
+   ${LIBHARDWARE_LIBRARIES}
+ )
+ 
+-target_include_directories(mir_android_diagnostics SYSTEM PRIVATE
+-  ${ANDROID_INCLUDE_DIRS})
+-
+ mir_add_wrapped_executable(mir_demo_standalone_render_overlays
+   render_overlays.cpp
+ )
+ 
+-target_include_directories(mir_demo_standalone_render_overlays SYSTEM PRIVATE
+-  ${ANDROID_INCLUDE_DIRS})
+-
+ target_link_libraries(mir_demo_standalone_render_overlays
+-  ${MIRCLIENT_LDFLAGS}
+-  ${MIRCOMMON_LDFLAGS}
+-  ${MIRPLATFORM_LDFLAGS}
++    ${MIRCLIENT_LDFLAGS}
++    ${MIRCOMMON_LDFLAGS}
++    ${MIRPLATFORM_LDFLAGS}
+ )
+ 
+ install(PROGRAMS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/mir_android_diagnostics
+diff --git a/src/platforms/common/client/mir/CMakeLists.txt b/src/platforms/common/client/mir/CMakeLists.txt
+index f2a5c20..8a32f49 100644
+--- a/src/platforms/common/client/mir/CMakeLists.txt
++++ b/src/platforms/common/client/mir/CMakeLists.txt
+@@ -1,7 +1,7 @@
++include_directories(${PROJECT_SOURCE_DIR}/src/include/client)
++include_directories(${PROJECT_SOURCE_DIR}/include/client)
++
+ add_library(client_platform_common STATIC
+   aging_buffer.cpp
+   weak_egl.cpp
+ )
+-target_include_directories(client_platform_common 
+-  PUBLIC ${PROJECT_SOURCE_DIR}/src/include/client 
+-  PUBLIC ${PROJECT_SOURCE_DIR}/include/client)
+diff --git a/src/platforms/common/server/CMakeLists.txt b/src/platforms/common/server/CMakeLists.txt
+index 112feaf..8b62e91 100644
+--- a/src/platforms/common/server/CMakeLists.txt
++++ b/src/platforms/common/server/CMakeLists.txt
+@@ -1,17 +1,22 @@
++if (MIR_BUILD_PLATFORM_MESA_KMS OR MIR_BUILD_PLATFORM_MESA_X11 OR MIR_BUILD_PLATFORM_EGLSTREAM_KMS)
++  add_subdirectory(kms-utils/)
++endif()
++
++include_directories(
++  ${server_common_include_dirs}
++  ${GL_INCLUDE_DIRS}
++)
++
+ add_library(server_platform_common STATIC
+   anonymous_shm_file.cpp
+   shm_buffer.cpp
+   shm_file.h
+ )
+ 
+-target_include_directories(server_platform_common PUBLIC
+-  ${server_common_include_dirs}
+-  SYSTEM PUBLIC ${GL_INCLUDE_DIRS}
+-)
+-
+ target_link_libraries(
+   server_platform_common
+ 
++  ${KMS_UTILS_STATIC_LIBRARY}
+   ${Boost_SYSTEM_LIBRARY}
+   ${GL_LDFLAGS} ${GL_LIBRARIES}
+ )
+diff --git a/tests/mir_test_doubles/CMakeLists.txt b/tests/mir_test_doubles/CMakeLists.txt
+index 5b1777f..16c617d 100644
+--- a/tests/mir_test_doubles/CMakeLists.txt
++++ b/tests/mir_test_doubles/CMakeLists.txt
+@@ -1,13 +1,13 @@
++include_directories(
++  ${CMAKE_SOURCE_DIR}
++  ${PROJECT_SOURCE_DIR}/src/include/platform
++  ${Boost_INCLUDE_DIRS}
++  ${CMAKE_SOURCE_DIR}
++)
++
+ add_library(
+   mir-test-doubles-platform-static STATIC
+   mock_egl.cpp
+   mock_gl.cpp
+   mock_android_hw.cpp
+ )
+-
+-target_include_directories(mir-test-doubles-platform-static
+-  PRIVATE ${CMAKE_SOURCE_DIR}
+-  ${PROJECT_SOURCE_DIR}/src/include/platform
+-  SYSTEM PRIVATE ${ANDROID_HEADERS_INCLUDE_DIRS}
+-  ${Boost_INCLUDE_DIRS}
+-)
+diff --git a/tests/unit-tests/platforms/android/server/test_server_interpreter.cpp b/tests/unit-tests/platforms/android/server/test_server_interpreter.cpp
+index da9112e..42a0218 100644
+--- a/tests/unit-tests/platforms/android/server/test_server_interpreter.cpp
++++ b/tests/unit-tests/platforms/android/server/test_server_interpreter.cpp
+@@ -199,14 +199,3 @@ TEST_F(ServerRenderWindow, throws_on_driver_unknown_inquiry)
+         render_window.driver_requests_info(NATIVE_WINDOW_CONSUMER_RUNNING_BEHIND);
+     }, std::runtime_error);
+ }
+-
+-TEST_F(ServerRenderWindow, reacts_to_buffer_age_query)
+-{
+-    EXPECT_NO_THROW(render_window.driver_requests_info(NATIVE_WINDOW_BUFFER_AGE));
+-}
+-
+-TEST_F(ServerRenderWindow, reacts_to_queue_duration_queries)
+-{
+-    EXPECT_NO_THROW(render_window.driver_requests_info(NATIVE_WINDOW_LAST_QUEUE_DURATION));
+-    EXPECT_NO_THROW(render_window.driver_requests_info(NATIVE_WINDOW_LAST_DEQUEUE_DURATION));
+-}
+diff --git a/tools/update_package_abis.sh b/tools/update_package_abis.sh
+index 40d3525..609a5b5 100755
+--- a/tools/update_package_abis.sh
++++ b/tools/update_package_abis.sh
+@@ -11,9 +11,7 @@ fi
+ 
+ packages="\
+     mir-client-platform-android:MIR_CLIENT_PLATFORM_ABI \
+-    mir-client-platform-android-caf:MIR_CLIENT_PLATFORM_ABI \
+-    mir-platform-graphics-android:MIR_SERVER_GRAPHICS_PLATFORM_ABI \
+-    mir-platform-graphics-android-caf:MIR_SERVER_GRAPHICS_PLATFORM_ABI"
++    mir-platform-graphics-android:MIR_SERVER_GRAPHICS_PLATFORM_ABI"
+ 
+ package_name()
+ {

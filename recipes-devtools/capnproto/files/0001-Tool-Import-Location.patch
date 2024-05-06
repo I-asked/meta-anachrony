@@ -1,0 +1,27 @@
+diff --color -rU3 capnproto-c++-1.0.2.orig/cmake/CapnProtoTargets.cmake capnproto-c++-1.0.2/cmake/CapnProtoTargets.cmake
+--- capnproto-c++-1.0.2.orig/cmake/CapnProtoTargets.cmake	2023-11-21 17:03:29.000000000 +0100
++++ capnproto-c++-1.0.2/cmake/CapnProtoTargets.cmake	2024-05-09 14:46:43.015889297 +0200
+@@ -205,17 +205,20 @@
+ # Add executable targets for the capnp compiler and plugins. This list must be kept manually in sync
+ # with the rest of the project.
+ 
++find_program(CAPNP_TOOL capnp)
+ add_executable(CapnProto::capnp_tool IMPORTED)
+ set_target_properties(CapnProto::capnp_tool PROPERTIES
+-  IMPORTED_LOCATION "${_IMPORT_PREFIX}/bin/capnp${CMAKE_EXECUTABLE_SUFFIX}"
++  IMPORTED_LOCATION "${CAPNP_TOOL}"
+ )
+ 
++find_program(CAPNPC_CPP capnpc-c++)
+ add_executable(CapnProto::capnpc_cpp IMPORTED)
+ set_target_properties(CapnProto::capnpc_cpp PROPERTIES
+-  IMPORTED_LOCATION "${_IMPORT_PREFIX}/bin/capnpc-c++${CMAKE_EXECUTABLE_SUFFIX}"
++  IMPORTED_LOCATION "${CAPNPC_CPP}"
+ )
+ 
++find_program(CAPNPC_CAPNP capnpc-capnp)
+ add_executable(CapnProto::capnpc_capnp IMPORTED)
+ set_target_properties(CapnProto::capnpc_capnp PROPERTIES
+-  IMPORTED_LOCATION "${_IMPORT_PREFIX}/bin/capnpc-capnp${CMAKE_EXECUTABLE_SUFFIX}"
++  IMPORTED_LOCATION "${CAPNPC_CAPNP}"
+ )

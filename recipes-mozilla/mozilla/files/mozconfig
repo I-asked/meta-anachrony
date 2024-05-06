@@ -1,0 +1,55 @@
+# Needed to use llvm-strip when packaging.
+MOZBUILD="$HOME/.mozbuild"
+
+#ac_add_options --with-system-nss # your version is too old
+#ac_add_options --with-system-jpeg # Insufficient JPEG library version
+#ac_add_options --with-system-zlib
+#ac_add_options --with-system-bz2
+#ac_add_options --with-system-png # system's libpng doesn't have APNG support
+#ac_add_options --with-system-libevent
+#ac_add_options --with-system-libvpx # probably too old
+#ac_add_options --with-system-icu
+#ac_add_options --enable-system-ffi
+#ac_add_options --enable-system-pixman
+
+ac_add_options --enable-application=b2g
+ac_add_options --with-app-basename=b2g
+ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
+
+ac_add_options --enable-forkserver
+
+ac_add_options --disable-updater
+
+# Set the api-daemon port
+ac_add_options --with-api-daemon-port=8081
+
+# Pretend to be an official build to be in a release configuration.
+export MOZILLA_OFFICIAL=1
+
+ac_add_options --disable-tests
+
+# Disable telemetry
+ac_add_options MOZ_TELEMETRY_REPORTING=
+
+#if [ "${B2G_DEBUG:-0}" != "0" ]; then
+#  ac_add_options --enable-debug
+#  ac_add_options --enable-debug-symbols
+#else
+#  if [ "${MOZ_DISABLE_LTO:-0}" = "0" ]; then
+#    # Enable Rust <-> C++ LTO
+#    ac_add_options --enable-lto
+#    export MOZ_LTO=cross
+#    ac_add_options --disable-profiling
+#  fi
+#fi
+
+ac_add_options --with-linker=lld
+ac_add_options --disable-strip
+ac_add_options --disable-install-strip
+
+ac_add_options --enable-pulseaudio
+
+# TODO:XXX: For now...
+ac_add_options --without-wasm-sandboxed-libraries
+
+mk_add_options AUTOCLOBBER=1

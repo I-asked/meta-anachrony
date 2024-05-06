@@ -1,0 +1,72 @@
+diff --git a/build/moz.configure/rust.configure b/build/moz.configure/rust.configure
+index 7a2fd1ae70..6c2a16d5b8 100644
+--- a/build/moz.configure/rust.configure
++++ b/build/moz.configure/rust.configure
+@@ -27,6 +27,28 @@ cargo = check_prog(
+     allow_missing=True,
+ )
+ 
++option(env='RUST_HOST',
++       nargs=1,
++       help='Define the system type for Rust performing the build')
++
++option(env='RUST_TARGET',
++       nargs=1,
++       help='Define the system type for Rust where the resulting executables will be used')
++
++
++@depends('RUST_HOST')
++@checking('rust host', lambda host: host)
++def rust_host_env(value):
++    if value:
++        return value[0]
++
++
++@depends('RUST_TARGET')
++@checking('rust target', lambda target: target)
++def rust_target_env(value):
++    if value:
++        return value[0]
++
+ 
+ @template
+ def unwrap_rustup(prog, name):
+@@ -474,6 +496,7 @@ def assert_rust_compile(host_or_target, rustc_target, rustc):
+ 
+ @depends(
+     rustc,
++    rust_host_env,
+     host,
+     host_c_compiler,
+     rustc_info.host,
+@@ -484,8 +507,11 @@ def assert_rust_compile(host_or_target, rustc_target, rustc):
+ @checking("for rust host triplet")
+ @imports(_from="textwrap", _import="dedent")
+ def rust_host_triple(
+-    rustc, host, compiler_info, rustc_host, rust_supported_targets, arm_target
++    rustc, rust_host_env, host, compiler_info, rustc_host, rust_supported_targets, arm_target
+ ):
++    if rust_host_env:
++        return rust_host_env
++
+     rustc_target = detect_rustc_target(
+         host, compiler_info, arm_target, rust_supported_targets
+     )
+@@ -516,12 +542,15 @@ def rust_host_triple(
+ 
+ 
+ @depends(
+-    rustc, target, c_compiler, rust_supported_targets, arm_target, when=rust_compiler
++    rustc, rust_target_env, target, c_compiler, rust_supported_targets, arm_target, when=rust_compiler
+ )
+ @checking("for rust target triplet")
+ def rust_target_triple(
+-    rustc, target, compiler_info, rust_supported_targets, arm_target
++    rustc, rust_target_env, target, compiler_info, rust_supported_targets, arm_target
+ ):
++    if rust_target_env:
++        return rust_target_env
++
+     rustc_target = detect_rustc_target(
+         target, compiler_info, arm_target, rust_supported_targets
+     )

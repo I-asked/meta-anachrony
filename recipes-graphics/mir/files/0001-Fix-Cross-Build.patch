@@ -1,0 +1,73 @@
+diff --color -rU3 mir-1.8.2.orig/CMakeLists.txt mir-1.8.2/CMakeLists.txt
+--- mir-1.8.2.orig/CMakeLists.txt	2021-12-01 11:13:18.000000000 +0100
++++ mir-1.8.2/CMakeLists.txt	2024-05-09 15:33:00.024034914 +0200
+@@ -292,6 +292,8 @@
+ pkg_check_modules(X11_XCURSOR REQUIRED xcursor)
+ pkg_check_modules(DRM REQUIRED libdrm)
+ 
++set(PROTOC_EXE protoc)
++
+ include_directories (SYSTEM ${GLESv2_INCLUDE_DIRS})
+ include_directories (SYSTEM ${EGL_INCLUDE_DIRS})
+ include_directories (SYSTEM ${GLM_INCLUDE_DIRS})
+diff --color -rU3 mir-1.8.2.orig/src/client/rpc/mir_protobuf_rpc_channel.cpp mir-1.8.2/src/client/rpc/mir_protobuf_rpc_channel.cpp
+--- mir-1.8.2.orig/src/client/rpc/mir_protobuf_rpc_channel.cpp	2021-12-01 11:13:18.000000000 +0100
++++ mir-1.8.2/src/client/rpc/mir_protobuf_rpc_channel.cpp	2024-05-09 16:53:08.881912178 +0200
+@@ -45,6 +45,7 @@
+ #include <boost/throw_exception.hpp>
+ #include <endian.h>
+ 
++#include <array>
+ #include <stdexcept>
+ #include <cstring>
+ 
+diff --color -rU3 mir-1.8.2.orig/src/renderers/gl/renderer.h mir-1.8.2/src/renderers/gl/renderer.h
+--- mir-1.8.2.orig/src/renderers/gl/renderer.h	2021-12-01 11:13:18.000000000 +0100
++++ mir-1.8.2/src/renderers/gl/renderer.h	2024-05-09 16:50:56.501826134 +0200
+@@ -29,6 +29,7 @@
+ #include "mir/renderer/gl/render_target.h"
+ 
+ #include MIR_SERVER_GL_H
++#include <array>
+ #include <unordered_map>
+ #include <unordered_set>
+ #include <vector>
+diff --color -rU3 mir-1.8.2.orig/src/server/glib_main_loop_sources.cpp mir-1.8.2/src/server/glib_main_loop_sources.cpp
+--- mir-1.8.2.orig/src/server/glib_main_loop_sources.cpp	2021-12-01 11:13:18.000000000 +0100
++++ mir-1.8.2/src/server/glib_main_loop_sources.cpp	2024-05-09 16:44:10.341494009 +0200
+@@ -21,6 +21,7 @@
+ #include "mir/lockable_callback.h"
+ #include "mir/raii.h"
+ 
++#include <array>
+ #include <algorithm>
+ #include <atomic>
+ #include <system_error>
+diff --color -rU3 mir-1.8.2.orig/src/wayland/generated/CMakeLists.txt mir-1.8.2/src/wayland/generated/CMakeLists.txt
+--- mir-1.8.2.orig/src/wayland/generated/CMakeLists.txt	2021-12-01 11:13:18.000000000 +0100
++++ mir-1.8.2/src/wayland/generated/CMakeLists.txt	2024-05-09 11:05:07.600892953 +0200
+@@ -19,15 +19,13 @@
+     set(OUTPUT_PATH_SRC "${GENERATED_DIR}/${PROTOCOL_NAME}_wrapper.cpp")
+     add_custom_command(OUTPUT "${OUTPUT_PATH_HEADER}"
+             VERBATIM
+-            COMMAND "sh" "-c" "${CMAKE_BINARY_DIR}/bin/mir_wayland_generator ${NAME_PREFIX} ${PROTOCOL_PATH} header > ${OUTPUT_PATH_HEADER}"
++            COMMAND "sh" "-c" "mir_wayland_generator ${NAME_PREFIX} ${PROTOCOL_PATH} header > ${OUTPUT_PATH_HEADER}"
+             DEPENDS "${PROTOCOL_PATH}"
+-            DEPENDS mir_wayland_generator
+             )
+     add_custom_command(OUTPUT "${OUTPUT_PATH_SRC}"
+             VERBATIM
+-            COMMAND "sh" "-c" "${CMAKE_BINARY_DIR}/bin/mir_wayland_generator ${NAME_PREFIX} ${PROTOCOL_PATH} source > ${OUTPUT_PATH_SRC}"
++            COMMAND "sh" "-c" "mir_wayland_generator ${NAME_PREFIX} ${PROTOCOL_PATH} source > ${OUTPUT_PATH_SRC}"
+             DEPENDS "${PROTOCOL_PATH}"
+-            DEPENDS mir_wayland_generator
+             )
+     set(GENERATED_FILES ${GENERATED_FILES} "${OUTPUT_PATH_HEADER}" "${OUTPUT_PATH_SRC}")
+ endmacro()
+@@ -46,4 +44,4 @@
+ 
+ set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)
+ 
+-set(GENERATED_FILES ${GENERATED_FILES} PARENT_SCOPE)
+\ No newline at end of file
++set(GENERATED_FILES ${GENERATED_FILES} PARENT_SCOPE)

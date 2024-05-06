@@ -1,0 +1,11 @@
+diff --color -rU3 xcursor-transparent-theme-0.1.1.orig/cursors/Makefile.am xcursor-transparent-theme-0.1.1/cursors/Makefile.am
+--- xcursor-transparent-theme-0.1.1.orig/cursors/Makefile.am	2003-10-30 13:13:59.000000000 +0100
++++ xcursor-transparent-theme-0.1.1/cursors/Makefile.am	2024-05-10 19:35:02.549522702 +0200
+@@ -91,6 +91,6 @@
+ 	$(INSTALL_DATA) $(CURSOR_REAL) $(DESTDIR)$(CURSOR_DIR)/ 
+ 	for CURSOR in $(CURSOR_NAMES); do \
+ 		echo '-- Installing cursor '$$CURSOR; \
+-		ln -s $(DESTDIR)$(CURSOR_DIR)/transp $(DESTDIR)$(CURSOR_DIR)/$$CURSOR; \
++		ln -s ./transp $(DESTDIR)$(CURSOR_DIR)/$$CURSOR; \
+ 	done
+ 

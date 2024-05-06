@@ -1,0 +1,9 @@
+diff --color -rU3 mir-1.8.2.orig/src/wayland/generator/CMakeLists.txt mir-1.8.2/src/wayland/generator/CMakeLists.txt
+--- mir-1.8.2.orig/src/wayland/generator/CMakeLists.txt	2021-12-01 11:13:18.000000000 +0100
++++ mir-1.8.2/src/wayland/generator/CMakeLists.txt	2024-05-09 11:10:55.744506200 +0200
+@@ -1,3 +1,5 @@
++find_package(PkgConfig)
++
+ pkg_check_modules(XMLPP libxml++-2.6 REQUIRED)
+ 
+ include_directories(SYSTEM ${XMLPP_INCLUDE_DIRS})
