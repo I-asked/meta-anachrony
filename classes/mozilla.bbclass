@@ -2,7 +2,12 @@ TUNE_FEATURES:append = " armv7a"
 
 inherit clang clang-native rust-common pkgconfig
 
-DEPENDS += "gnu-config-native virtual/libintl zip-native wasi-libc-native wasi-sdk-bin-native rust-native cargo-native libstd-rs gcc-runtime libcxx-native libcxx"
+DEPENDS += "gnu-config-native virtual/libintl zip-native \
+            wasi-sdk-bin wasi-libc-native \
+            rust-native cargo-native libstd-rs \
+            gcc-runtime libcxx-native libcxx\
+            cbindgen-bin-native unzip-native \
+"
 
 SRC_URI += "file://mozconfig"
 
@@ -24,13 +29,14 @@ SYSROOT_DIRS_IGNORE += "\
 export CXXSTDLIB = "c++"
 
 export CROSS_COMPILE = "1"
-export MOZCONFIG = "${B}/mozconfig"
+export MOZCONFIG = "${B}/my-mozconfig"
 export MOZ_OBJDIR = "${S}/gecko-build-dir"
 
 export BUILD_LDFLAGS += " -fuse-ld=lld "
 export BUILD_CFLAGS += " -fuse-ld=lld "
 
 export AS = "${CC}"
+
 export HOST_AS = "${BUILD_CC}"
 export HOST_CC = "${BUILD_CC}"
 export HOST_CXX = "${BUILD_CXX}"
@@ -43,7 +49,7 @@ export HOST_AR = "${BUILD_AR}"
 
 mozilla_run_mach() {
     export SHELL="/bin/sh"
-    export RUSTFLAGS="${RUSTFLAGS} -lc++ -Cpanic=unwind"
+    export RUSTFLAGS="${RUSTFLAGS} -lc++ -Cpanic=abort"
 
     export RUST_HOST="${RUST_BUILD_SYS}"
     export RUST_TARGET="${RUST_HOST_SYS}"
@@ -75,8 +81,8 @@ mozilla_do_configure() {
     fi
     echo ac_add_options --enable-optimize=\"${SELECTED_OPTIMIZATION}\" \
         >> ${MOZCONFIG}
-    #echo ac_add_options --with-wasi-sysroot=\"${RECIPE_SYSROOT_NATIVE}/usr/share/wasi-sysroot\" \
-    #    >> ${MOZCONFIG}
+    echo ac_add_options --with-wasi-sysroot=\"${RECIPE_SYSROOT}/usr/share/wasi-sysroot\" \
+        >> ${MOZCONFIG}
 
     mozilla_run_mach configure
 }
@@ -86,9 +92,14 @@ mozilla_do_compile() {
 }
 
 mozilla_do_install() {
-    mozilla_run_mach install
+    rm -f ${MOZ_OBJDIR}/dist/*.tar.bz2
+
+    mozilla_run_mach package
+
+    install -d ${D}/opt
+    tar -C ${D}/opt/ -xjf ${MOZ_OBJDIR}/dist/*.tar.bz2
 }
 
 do_configure[network] = "1"
 
-EXPORT_FUNCTIONS do_configure do_compile do_install
+EXPORT_FUNCTIONS do_configure do_compile do_install run_mach

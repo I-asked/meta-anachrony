@@ -1,0 +1,14 @@
+[Unit]
+Description=B2G API Daemon
+Before=b2g.service
+BindsTo=b2g.service
+ConditionUser=!root
+
+[Service]
+Type=simple
+Environment=DEFAULT_SETTINGS=%h/.b2g/api-daemon.toml
+ExecStartPre=/usr/bin/prepare-api-daemon.sh
+ExecStart=/usr/bin/api-daemon
+
+[Install]
+WantedBy=b2g.service
