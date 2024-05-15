@@ -83,6 +83,9 @@ mozilla_do_configure() {
         >> ${MOZCONFIG}
     echo ac_add_options --with-wasi-sysroot=\"${RECIPE_SYSROOT}/usr/share/wasi-sysroot\" \
         >> ${MOZCONFIG}
+    if [ ! -z "${CCACHE_DIR}" ] ; then
+        echo ac_add_options --with-ccache >> ${MOZCONFIG}
+    fi
 
     mozilla_run_mach configure
 }
