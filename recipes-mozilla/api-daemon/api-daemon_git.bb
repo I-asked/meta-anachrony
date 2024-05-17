@@ -5,7 +5,7 @@ HOMEPAGE = "https://github.com/I-asked/api-daemon"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE.txt;md5=3b83ef96387f14655fc854ddc3c6bd57"
 
-SRC_URI += "git://github.com/I-asked/api-daemon.git;protocol=https;branch=main \
+SRC_URI += "git://github.com/I-asked/api-daemon.git;protocol=https;branch=chronology \
     file://api-daemon.service \
     file://prepare-api-daemon.sh \
 "
@@ -17,7 +17,7 @@ PR = "r1"
 PV = "+git${SRCPV}"
 S = "${WORKDIR}/git"
 
-DEPENDS += "openssl"
+DEPENDS += "openssl libcap-native"
 
 CARGO_SRC_DIR = "daemon"
 CARGO_DISABLE_BITBAKE_VENDORING = "1"
@@ -40,9 +40,8 @@ do_install:append () {
     install -d ${D}${bindir}
     cp -dr --preserve=timestamp,mode ${WORKDIR}/prepare-api-daemon.sh ${D}${bindir}/prepare-api-daemon.sh
 
-    install -d ${D}/usr/lib/systemd/user
     install -d ${D}/usr/lib/systemd/user/b2g.service.wants
-    install ${WORKDIR}/api-daemon.service ${D}/usr/lib/systemd/user
+    install ${WORKDIR}/api-daemon.service ${D}/usr/lib/systemd/user/
     ln -sf ../api-daemon.service ${D}/usr/lib/systemd/user/b2g.service.wants/api-daemon.service
 
     setcap "CAP_NET_BIND_SERVICE+ep" ${D}${bindir}/api-daemon
@@ -54,5 +53,3 @@ pkg_postinst_ontarget:${PN} () {
 setcap "CAP_NET_BIND_SERVICE+ep" "${bindir}/api-daemon"
 setcap "CAP_NET_BIND_SERVICE+ep" "${bindir}/prepare-api-daemon.sh"
 }
-
-PACKAGE_WRITE_DEPS = "libcap-native"

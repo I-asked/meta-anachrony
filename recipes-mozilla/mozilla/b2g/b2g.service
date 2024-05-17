@@ -1,0 +1,14 @@
+[Unit]
+Description=Boot to Gecko
+After=fireplace.service api-daemon.service
+ConditionUser=!root
+Wants=api-daemon.service
+
+[Service]
+Type=simple
+Environment=LD_LIBRARY_PATH=/opt/b2g DISPLAY=%t/wayland-0
+ExecStart=/opt/b2g/b2g -profile %h/.b2g/profile -kiosk
+Restart=always
+
+[Install]
+WantedBy=fireplace.service
