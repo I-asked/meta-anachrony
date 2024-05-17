@@ -1,7 +1,6 @@
 [Unit]
 Description=B2G API Daemon
 Before=b2g.service
-BindsTo=b2g.service
 ConditionUser=!root
 
 [Service]
