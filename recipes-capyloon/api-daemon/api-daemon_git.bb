@@ -6,11 +6,11 @@ LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE.txt;md5=3b83ef96387f14655fc854ddc3c6bd57"
 
 SRC_URI += "git://github.com/capyloon/api-daemon.git;protocol=https;branch=main \
-            recipes-mozilla/api-daemon/files/0001-Make-selinux-optional-on-non-Gonk-Linux-platforms.patch \
-            recipes-mozilla/api-daemon/files/0002-Fix-relative-paths-in-release_libs.sh.patch \
-            recipes-mozilla/api-daemon/files/0003-Disable-libsignal-in-release_libs.sh.patch \
-            recipes-mozilla/api-daemon/files/0004-Do-not-run-rustfmt-during-rebuild.patch \
-            recipes-mozilla/api-daemon/files/0005-Fix-b2ghald-not-compiling.patch \
+            file://0001-Make-selinux-optional-on-non-Gonk-Linux-platforms.patch \
+            file://0002-Fix-relative-paths-in-release_libs.sh.patch \
+            file://0003-Disable-libsignal-in-release_libs.sh.patch \
+            file://0004-Do-not-run-rustfmt-during-rebuild.patch \
+            file://0005-Fix-b2ghald-not-compiling.patch \
             file://api-daemon.service \
             file://prepare-api-daemon.sh \
            "

@@ -6,9 +6,9 @@ LICENSE = "MPL-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=dc9b6ecd19a14a54a628edaaf23733bf"
 
 SRC_URI += "git://github.com/capyloon/gecko-b2g.git;protocol=https;branch=capyloon \
-            recipes-mozilla/mozilla/b2g/0001-Obtain-Rust-Triple-From-OE.patch \
-            recipes-mozilla/mozilla/b2g/0002-Make-kiosk-NOT-run-in-fullscreen.patch \
-            recipes-mozilla/mozilla/b2g/0003-Force-disable-CLOCK_MONOTONIC.patch \
+            file://0001-Obtain-Rust-Triple-From-OE.patch \
+            file://0002-Make-kiosk-NOT-run-in-fullscreen.patch \
+            file://0003-Force-disable-CLOCK_MONOTONIC.patch \
             file://b2g.service \
            "
 
