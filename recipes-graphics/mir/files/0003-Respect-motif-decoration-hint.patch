@@ -1,0 +1,127 @@
+From 972bcd667d7b4dbccdb33fbbaba01ef2b79c1a13 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Sun, 19 May 2024 09:12:16 +0200
+Subject: [PATCH 3/3] Respect motif decoration hint
+
+This allows a window to request to be undecorated by setting the
+decorations element of the `_MOTIF_WM_HINTS` property to 0.
+
+Ported from e95538d52ca3404460a924f8fa184ebb90247de2
+---
+ .../frontend_xwayland/xwayland_surface.cpp    | 52 ++++++++++++++++++-
+ .../frontend_xwayland/xwayland_surface.h      |  4 ++
+ 2 files changed, 55 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/frontend_xwayland/xwayland_surface.cpp b/src/server/frontend_xwayland/xwayland_surface.cpp
+index 926ad04a71..ff33f03a78 100644
+--- a/src/server/frontend_xwayland/xwayland_surface.cpp
++++ b/src/server/frontend_xwayland/xwayland_surface.cpp
+@@ -71,6 +71,32 @@ enum class NetWmMoveresize: uint32_t
+     CANCEL = 11,        /* cancel operation */
+ };
+ 
++// Any standard for the motif hints seems to be lost to time, but Weston has a reasonable definition:
++// https://github.com/wayland-project/weston/blob/f7f8f5f1a87dd697ad6de74a885493bcca920cde/xwayland/window-manager.c#L78
++namespace MotifWmHintsIndices
++{
++enum MotifWmHintsIndices: unsigned
++{
++    FLAGS,
++    FUNCTIONS,
++    DECORATIONS,
++    INPUT_MODE,
++    STATUS,
++    END,
++};
++}
++
++namespace MotifWmHintsFlags
++{
++enum MotifWmHintsFlags: uint32_t
++{
++    FUNCTIONS = (1L << 0),
++    DECORATIONS = (1L << 1),
++    INPUT_MODE = (1L << 2),
++    STATUS = (1L << 3),
++};
++}
++
+ auto wm_resize_edge_to_mir_resize_edge(NetWmMoveresize wm_resize_edge) -> std::experimental::optional<MirResizeEdge>
+ {
+     switch (wm_resize_edge)
+@@ -195,6 +221,14 @@ mf::XWaylandSurface::XWaylandSurface(
+               {
+                   std::lock_guard<std::mutex> lock{mutex};
+                   this->cached.supported_wm_protocols.clear();
++              }),
++          property_handler<std::vector<uint32_t>>(
++              connection,
++              window,
++              connection->motif_wm_hints,
++              [this](auto hints)
++              {
++                  motif_wm_hints(hints);
+               })}
+ {
+     cached.override_redirect = event->override_redirect;
+@@ -564,7 +598,6 @@ void mf::XWaylandSurface::attach_wl_surface(WlSurface* wl_surface)
+         params.top_left = cached.top_left;
+         params.type = mir_window_type_freestyle;
+         params.state = state.mir_window_state();
+-        params.server_side_decorated = !cached.override_redirect;
+     }
+ 
+     std::vector<std::function<void()>> reply_functions;
+@@ -588,6 +621,8 @@ void mf::XWaylandSurface::attach_wl_surface(WlSurface* wl_surface)
+         {
+             params.update_from(*spec.value());
+         }
++
++        params.server_side_decorated = !cached.override_redirect && !cached.motif_decorations_disabled;
+     }
+ 
+     auto const surface = shell->create_surface(session, params, observer);
+@@ -1029,3 +1064,18 @@ auto mf::XWaylandSurface::latest_input_timestamp(std::lock_guard<std::mutex> con
+         return {};
+     }
+ }
++
++void mf::XWaylandSurface::motif_wm_hints(std::vector<uint32_t> const& hints)
++{
++    std::lock_guard<std::mutex> lock{mutex};
++    if (hints.size() != MotifWmHintsIndices::END)
++    {
++        log_error("_MOTIF_WM_HINTS value has incorrect size %zu", hints.size());
++        return;
++    }
++    if (MotifWmHintsFlags::DECORATIONS & hints[MotifWmHintsIndices::FLAGS])
++    {
++        // Disable decorations only if all flags are off
++        cached.motif_decorations_disabled = (hints[MotifWmHintsIndices::DECORATIONS] == 0);
++    }
++}
+diff --git a/src/server/frontend_xwayland/xwayland_surface.h b/src/server/frontend_xwayland/xwayland_surface.h
+index 6dcf10bfdb..523de22305 100644
+--- a/src/server/frontend_xwayland/xwayland_surface.h
++++ b/src/server/frontend_xwayland/xwayland_surface.h
+@@ -66,6 +66,7 @@ public:
+     void property_notify(xcb_atom_t property);
+     void attach_wl_surface(WlSurface* wl_surface); ///< Should only be called on the Wayland thread
+     void move_resize(uint32_t detail);
++    void motif_wm_hints(std::vector<uint32_t> const& hints);
+ 
+ private:
+     /// contains more information than just a MirWindowState
+@@ -146,6 +147,9 @@ private:
+ 
+         /// The contents of the _NET_SUPPORTED property set by the client
+         std::set<xcb_atom_t> supported_wm_protocols;
++
++        /// True if server-side decorations have been explicitly disabled with motif hints
++        bool motif_decorations_disabled{false};
+     } cached;
+ 
+     /// Set in set_wl_surface and cleared when a scene surface is created from it
+-- 
+2.44.0
+

@@ -1,0 +1,120 @@
+From 384206d332a3d3fc8bcdda4744f94ef19731f166 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Tue, 28 Mar 2023 00:54:49 +0200
+Subject: [PATCH 5/5] hw/xwayland & glamor: Enable xwayland-present for more
+ than just GBM
+
+---
+ glamor/glamor.c                      | 2 ++
+ glamor/glamor_egl.c                  | 2 +-
+ hw/xwayland/xwayland-glamor-hybris.c | 3 ---
+ hw/xwayland/xwayland-glamor.c        | 3 +--
+ hw/xwayland/xwayland-present.h       | 3 ---
+ hw/xwayland/xwayland-window.h        | 2 --
+ 6 files changed, 4 insertions(+), 11 deletions(-)
+
+diff --git a/glamor/glamor.c b/glamor/glamor.c
+index b407139fa..aa02f41ab 100644
+--- a/glamor/glamor.c
++++ b/glamor/glamor.c
+@@ -1023,6 +1023,7 @@ _glamor_fds_from_pixmap(ScreenPtr screen, PixmapPtr pixmap, int *fds,
+         if (!glamor_pixmap_ensure_fbo(pixmap, 0))
+             return 0;
+ 
++#ifdef GLAMOR_HAS_GBM
+         if (modifier) {
+             return glamor_egl_fds_from_pixmap(screen, pixmap, fds,
+                                               strides, offsets,
+@@ -1035,6 +1036,7 @@ _glamor_fds_from_pixmap(ScreenPtr screen, PixmapPtr pixmap, int *fds,
+ 
+             return fds[0] >= 0;
+         }
++#endif
+     default:
+         break;
+     }
+diff --git a/glamor/glamor_egl.c b/glamor/glamor_egl.c
+index 45f463e50..6e0406a31 100644
+--- a/glamor/glamor_egl.c
++++ b/glamor/glamor_egl.c
+@@ -402,7 +402,7 @@ glamor_gbm_bo_from_pixmap(ScreenPtr screen, PixmapPtr pixmap)
+     return glamor_gbm_bo_from_pixmap_internal(screen, pixmap);
+ }
+ 
+-int
++_X_EXPORT int
+ glamor_egl_fds_from_pixmap(ScreenPtr screen, PixmapPtr pixmap, int *fds,
+                            uint32_t *strides, uint32_t *offsets,
+                            uint64_t *modifier)
+diff --git a/hw/xwayland/xwayland-glamor-hybris.c b/hw/xwayland/xwayland-glamor-hybris.c
+index 7bf4e4e5e..7b2b0b239 100644
+--- a/hw/xwayland/xwayland-glamor-hybris.c
++++ b/hw/xwayland/xwayland-glamor-hybris.c
+@@ -79,7 +79,6 @@ xwl_glamor_hybris_create_pixmap_for_native_buffer(ScreenPtr screen,  EGLClientBu
+     PixmapPtr pixmap;
+     struct xwl_pixmap *xwl_pixmap;
+     struct xwl_screen *xwl_screen = xwl_screen_get(screen);
+-    const GLint swizzle[] = {GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA};
+     
+     xwl_pixmap = malloc(sizeof *xwl_pixmap);
+     if (xwl_pixmap == NULL)
+@@ -112,8 +111,6 @@ xwl_glamor_hybris_create_pixmap_for_native_buffer(ScreenPtr screen,  EGLClientBu
+     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+ 
+-    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
+-
+     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, xwl_pixmap->image);
+     if (eglGetError() != EGL_SUCCESS)
+       goto error;
+diff --git a/hw/xwayland/xwayland-glamor.c b/hw/xwayland/xwayland-glamor.c
+index 1f59dd0d0..3829a58f2 100644
+--- a/hw/xwayland/xwayland-glamor.c
++++ b/hw/xwayland/xwayland-glamor.c
+@@ -463,8 +463,7 @@ xwl_glamor_select_glamor_hybris_backend(struct xwl_screen *xwl_screen)
+ void
+ xwl_glamor_select_backend(struct xwl_screen *xwl_screen, Bool use_eglstream)
+ {
+-    if (true) {
+-        xwl_glamor_select_glamor_hybris_backend(xwl_screen);
++    if (xwl_glamor_select_glamor_hybris_backend(xwl_screen)) {
+         return;
+     } 
+ 
+diff --git a/hw/xwayland/xwayland-present.h b/hw/xwayland/xwayland-present.h
+index 35b579469..4787a4486 100644
+--- a/hw/xwayland/xwayland-present.h
++++ b/hw/xwayland/xwayland-present.h
+@@ -32,7 +32,6 @@
+ 
+ #include "xwayland-types.h"
+ 
+-#ifdef GLAMOR_HAS_GBM
+ struct xwl_present_window {
+     struct xwl_present_event *sync_flip;
+     WindowPtr window;
+@@ -67,6 +66,4 @@ Bool xwl_present_init(ScreenPtr screen);
+ void xwl_present_cleanup(WindowPtr window);
+ void xwl_present_unrealize_window(struct xwl_present_window *xwl_present_window);
+ 
+-#endif /* GLAMOR_HAS_GBM */
+-
+ #endif /* XWAYLAND_PRESENT_H */
+diff --git a/hw/xwayland/xwayland-window.h b/hw/xwayland/xwayland-window.h
+index d94f07204..9ae2d0dee 100644
+--- a/hw/xwayland/xwayland-window.h
++++ b/hw/xwayland/xwayland-window.h
+@@ -51,10 +51,8 @@ struct xwl_window {
+     struct xorg_list window_buffers_available;
+     struct xorg_list window_buffers_unavailable;
+     OsTimerPtr window_buffers_timer;
+-#ifdef GLAMOR_HAS_GBM
+     struct xorg_list frame_callback_list;
+     Bool present_flipped;
+-#endif
+ };
+ 
+ struct xwl_window *xwl_window_get(WindowPtr window);
+-- 
+2.39.2 (Apple Git-143)
+

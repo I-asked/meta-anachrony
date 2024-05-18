@@ -2,7 +2,11 @@ SUMMARY ?= "The Mir compositor"
 HOMEPAGE = "https://mir-server.io"
 LICENSE = "GPL-2.0-only | GPL-3.0-only"
 
-SRC_URI += "https://github.com/MirServer/mir/releases/download/v${PV}/mir-${PV}.tar.xz"
+SRC_URI += "https://github.com/MirServer/mir/releases/download/v${PV}/mir-${PV}.tar.xz \
+            file://0001-Fix-cross-build.patch \
+            file://0002-Merge-1462.patch \
+            file://0003-Respect-motif-decoration-hint.patch \
+           "
 
 LIC_FILES_CHKSUM = "\
     file://COPYING.GPL2;md5=b234ee4d69f5fce4486a80fdaf4a4263 \
@@ -18,8 +22,6 @@ FILES:${PN} += "${datadir}"
 inherit pkgconfig cmake python3native
 
 DEPENDS += " boost yaml-cpp glib-2.0 util-linux-libuuid glm libdrm virtual/egl udev libinput wayland wayland-native libepoxy glog gflags protobuf-cpp protobuf-cpp-native lttng-ust lttng-ust-native libxcb libxcursor nettle libxml++ freetype libgbm python3-pillow-native virtual/libgles2 mir-wayland-generator-native capnproto-c++ capnproto-c++-native systemtap "
-
-RDEPENDS:${PN} += " xkeyboard-config "
 
 OECMAKE_GENERATOR = "Unix Makefiles"
 

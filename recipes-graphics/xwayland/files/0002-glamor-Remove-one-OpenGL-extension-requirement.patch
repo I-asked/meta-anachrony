@@ -1,0 +1,29 @@
+From fc7060f54f4e5e7f42f80173baf0a87ef642e9f7 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Mon, 13 Mar 2023 20:57:09 +0100
+Subject: [PATCH 2/5] glamor: Remove one OpenGL extension requirement
+
+Adrenos don't have those and still function properly.
+---
+ glamor/glamor.c | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/glamor/glamor.c b/glamor/glamor.c
+index 177871a10..f53d81d87 100644
+--- a/glamor/glamor.c
++++ b/glamor/glamor.c
+@@ -766,11 +766,6 @@ glamor_init(ScreenPtr screen, unsigned int flags)
+             ErrorF("GL_EXT_texture_format_BGRA8888 required\n");
+             goto fail;
+         }
+-
+-        if (!epoxy_has_gl_extension("GL_OES_texture_border_clamp")) {
+-            ErrorF("GL_OES_texture_border_clamp required\n");
+-            goto fail;
+-        }
+     }
+ 
+     if (!epoxy_has_gl_extension("GL_ARB_vertex_array_object") &&
+-- 
+2.39.2 (Apple Git-143)
+

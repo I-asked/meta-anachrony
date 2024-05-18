@@ -1,0 +1,99 @@
+From 6585438b99904a10a246a8c4a114466c59216378 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Tue, 14 Mar 2023 14:42:47 +0100
+Subject: [PATCH 3/5] glamor: Enable EGL to work on Android/Hybris buffers
+ instead of GBM
+
+---
+ glamor/glamor_egl.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/glamor/glamor_egl.c b/glamor/glamor_egl.c
+index dfa5d3e4f..45f463e50 100644
+--- a/glamor/glamor_egl.c
++++ b/glamor/glamor_egl.c
+@@ -138,9 +138,13 @@ glamor_create_texture_from_image(ScreenPtr screen,
+ struct gbm_device *
+ glamor_egl_get_gbm_device(ScreenPtr screen)
+ {
++#if 0
+     struct glamor_egl_screen_private *glamor_egl =
+         glamor_egl_get_screen_private(xf86ScreenToScrn(screen));
+     return glamor_egl->gbm;
++#else
++    return NULL;
++#endif
+ }
+ 
+ Bool
+@@ -262,6 +266,7 @@ glamor_get_name_from_bo(int gbm_fd, struct gbm_bo *bo, int *name)
+ static Bool
+ glamor_make_pixmap_exportable(PixmapPtr pixmap, Bool modifiers_ok)
+ {
++#if 0
+     ScreenPtr screen = pixmap->drawable.pScreen;
+     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+     struct glamor_egl_screen_private *glamor_egl =
+@@ -368,6 +373,9 @@ glamor_make_pixmap_exportable(PixmapPtr pixmap, Bool modifiers_ok)
+     screen->DestroyPixmap(exported);
+ 
+     return TRUE;
++#else
++    return FALSE;
++#endif
+ }
+ 
+ static struct gbm_bo *
+@@ -498,6 +506,7 @@ glamor_back_pixmap_from_fd(PixmapPtr pixmap,
+                            CARD16 height,
+                            CARD16 stride, CARD8 depth, CARD8 bpp)
+ {
++#if 0
+     ScreenPtr screen = pixmap->drawable.pScreen;
+     ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+     struct glamor_egl_screen_private *glamor_egl;
+@@ -527,6 +536,9 @@ glamor_back_pixmap_from_fd(PixmapPtr pixmap,
+     ret = glamor_egl_create_textured_pixmap_from_gbm_bo(pixmap, bo, FALSE);
+     gbm_bo_destroy(bo);
+     return ret;
++#else
++    return FALSE;
++#endif
+ }
+ 
+ static uint32_t
+@@ -909,8 +921,10 @@ static void glamor_egl_cleanup(struct glamor_egl_screen_private *glamor_egl)
+         lastGLContext = NULL;
+         eglTerminate(glamor_egl->display);
+     }
++#if 0
+     if (glamor_egl->gbm)
+         gbm_device_destroy(glamor_egl->gbm);
++#endif
+     free(glamor_egl->device_path);
+     free(glamor_egl);
+ }
+@@ -944,6 +958,8 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
+ 
+     scrn->privates[xf86GlamorEGLPrivateIndex].ptr = glamor_egl;
+     glamor_egl->fd = fd;
++
++#if 0
+     glamor_egl->gbm = gbm_create_device(glamor_egl->fd);
+     if (glamor_egl->gbm == NULL) {
+         ErrorF("couldn't get display device\n");
+@@ -952,6 +968,11 @@ glamor_egl_init(ScrnInfoPtr scrn, int fd)
+ 
+     glamor_egl->display = glamor_egl_get_display(EGL_PLATFORM_GBM_MESA,
+                                                  glamor_egl->gbm);
++#else
++    glamor_egl->gbm = NULL;
++    glamor_egl->display = eglGetDisplay((EGLNativeDisplayType) (intptr_t) fd);
++#endif
++
+     if (!glamor_egl->display) {
+         xf86DrvMsg(scrn->scrnIndex, X_ERROR, "eglGetDisplay() failed\n");
+         goto error;
+-- 
+2.39.2 (Apple Git-143)
+

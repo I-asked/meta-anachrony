@@ -6,7 +6,7 @@ Wants=api-daemon.service
 
 [Service]
 Type=simple
-Environment=LD_LIBRARY_PATH=/opt/b2g DISPLAY=%t/wayland-0
+Environment=LD_LIBRARY_PATH=/opt/b2g DISPLAY=:0
 ExecStart=/opt/b2g/b2g -profile %h/.b2g/profile -kiosk
 Restart=always
 

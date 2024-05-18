@@ -1,0 +1,90 @@
+From 84f4f14b78a3853ea7d75c54a960c637fec50748 Mon Sep 17 00:00:00 2001
+From: Mark <mark.yao@rock-chips.com>
+Date: Mon, 18 Jan 2016 04:54:16 +0000
+Subject: [PATCH 4/5] glamor: fix rb swap and picture lost
+
+Change-Id: Ibbcd03363bcd656b1b41bca1d450ea7065eb06a2
+Signed-off-by: Mark Yao <mark.yao@rock-chips.com>
+---
+ glamor/glamor.c                      | 4 ++--
+ glamor/glamor_utils.h                | 7 +++++++
+ hw/xwayland/xwayland-glamor-hybris.c | 8 +++++---
+ 3 files changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/glamor/glamor.c b/glamor/glamor.c
+index f53d81d87..b407139fa 100644
+--- a/glamor/glamor.c
++++ b/glamor/glamor.c
+@@ -587,9 +587,9 @@ glamor_setup_formats(ScreenPtr screen)
+     if (glamor_priv->is_gles) {
+         assert(X_BYTE_ORDER == X_LITTLE_ENDIAN);
+         glamor_add_format(screen, 24, PICT_x8b8g8r8,
+-                          GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, TRUE);
++                          GL_BGRA_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE, TRUE);
+         glamor_add_format(screen, 32, PICT_a8b8g8r8,
+-                          GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, TRUE);
++                          GL_BGRA_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE, TRUE);
+     } else {
+         glamor_add_format(screen, 24, PICT_x8r8g8b8,
+                           GL_RGBA, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, TRUE);
+diff --git a/glamor/glamor_utils.h b/glamor/glamor_utils.h
+index 651faf2fe..88f4f9a08 100644
+--- a/glamor/glamor_utils.h
++++ b/glamor/glamor_utils.h
+@@ -729,6 +729,13 @@ glamor_glDrawArrays_GL_QUADS(glamor_screen_private *glamor_priv, unsigned count)
+         glDrawArrays(GL_QUADS, 0, count * 4);
+     } else {
+         glamor_gldrawarrays_quads_using_indices(glamor_priv, count);
++
++        GLint fbo = 0;
++        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
++        if (0 != fbo) {
++            glBindFramebuffer(GL_FRAMEBUFFER, 0);
++            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
++        }
+     }
+ }
+ 
+diff --git a/hw/xwayland/xwayland-glamor-hybris.c b/hw/xwayland/xwayland-glamor-hybris.c
+index c8bb73375..7bf4e4e5e 100644
+--- a/hw/xwayland/xwayland-glamor-hybris.c
++++ b/hw/xwayland/xwayland-glamor-hybris.c
+@@ -79,6 +79,7 @@ xwl_glamor_hybris_create_pixmap_for_native_buffer(ScreenPtr screen,  EGLClientBu
+     PixmapPtr pixmap;
+     struct xwl_pixmap *xwl_pixmap;
+     struct xwl_screen *xwl_screen = xwl_screen_get(screen);
++    const GLint swizzle[] = {GL_BLUE, GL_GREEN, GL_RED, GL_ALPHA};
+     
+     xwl_pixmap = malloc(sizeof *xwl_pixmap);
+     if (xwl_pixmap == NULL)
+@@ -111,6 +112,8 @@ xwl_glamor_hybris_create_pixmap_for_native_buffer(ScreenPtr screen,  EGLClientBu
+     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+ 
++    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
++
+     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, xwl_pixmap->image);
+     if (eglGetError() != EGL_SUCCESS)
+       goto error;
+@@ -239,7 +242,7 @@ xwl_glamor_hybris_get_wl_buffer_for_pixmap(PixmapPtr pixmap)
+         android_wlegl_handle_add_fd(wlegl_handle, fds[i]);
+     }
+ 
+-    xwl_pixmap->buffer = android_wlegl_create_buffer(glamor_egl->android_wlegl, width, height, xwl_pixmap->stride, xwl_pixmap->format, HYBRIS_USAGE_HW_RENDER, wlegl_handle);
++    xwl_pixmap->buffer = android_wlegl_create_buffer(glamor_egl->android_wlegl, width, height, xwl_pixmap->stride, xwl_pixmap->format, HYBRIS_USAGE_HW_TEXTURE, wlegl_handle);
+     android_wlegl_handle_destroy(wlegl_handle);
+ 
+     return xwl_pixmap->buffer;
+@@ -305,8 +308,7 @@ xwl_glamor_hybris_init_egl(struct xwl_screen *xwl_screen)
+         EGL_DEPTH_SIZE, 24,
+         EGL_STENCIL_SIZE, 8,
+         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+-            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
++        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+         EGL_NONE
+     };
+ 
+-- 
+2.39.2 (Apple Git-143)
+
