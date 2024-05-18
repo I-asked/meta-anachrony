@@ -32,6 +32,13 @@ allow_remove_preloaded = true
 [procmanager_service]
 socket_path = "/tmp/b2gkiller_hints"
 hints_path = "/tmp/prochints.dat"
+
+[content_manager]
+storage_path = "${HOME}/.b2g/costaeres"
+metadata_cache_capacity = 250
+
+[dweb]
+storage_path = "${HOME}/.b2g/dweb"
 EOF
 test -e ${HOME}/.b2g/profile/user.js || cat <<EOF >${HOME}/.b2g/profile/user.js
 //
@@ -107,7 +114,7 @@ user_pref("dom.imagecapture.enabled", true);
 
 // Don't complain about missing nm
 user_pref("network.gonk.manage-offline-status", false);
-user_pref("b2g.wifi.nmcli-path", "/usr/bin/true");
+user_pref("b2g.wifi.nmcli-path", "/bin/true");
 
 user_pref("apz.overscroll.enabled", true);
 

@@ -1,0 +1,44 @@
+From 7e1bef6e165367e9a498a8ec54723ba6015beb18 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Thu, 16 May 2024 09:55:21 +0200
+Subject: [PATCH] Make kiosk NOT run in fullscreen
+
+---
+ widget/gtk/nsWindow.cpp | 12 ------------
+ 1 file changed, 12 deletions(-)
+
+diff --git a/widget/gtk/nsWindow.cpp b/widget/gtk/nsWindow.cpp
+index 461ecc5cb9db..de561d2a7eb5 100644
+--- a/widget/gtk/nsWindow.cpp
++++ b/widget/gtk/nsWindow.cpp
+@@ -6249,8 +6249,6 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
+     } else {
+       LOG("  set kiosk mode");
+     }
+-    // Kiosk mode always use fullscreen.
+-    MakeFullScreen(/* aFullScreen */ true);
+   }
+ 
+   if (mWindowType == WindowType::Popup) {
+@@ -7540,18 +7538,8 @@ nsresult nsWindow::MakeFullScreen(bool aFullScreen) {
+         ApplySizeConstraints();
+       }
+     }
+-
+-    if (mKioskMonitor.isSome()) {
+-      KioskLockOnMonitor();
+-    } else {
+-      gtk_window_fullscreen(GTK_WINDOW(mShell));
+-    }
+   } else {
+     // Kiosk mode always use fullscreen mode.
+-    if (gKioskMode) {
+-      return NS_ERROR_NOT_AVAILABLE;
+-    }
+-
+     gtk_window_unfullscreen(GTK_WINDOW(mShell));
+ 
+     if (mIsPIPWindow) {
+-- 
+2.44.0
+

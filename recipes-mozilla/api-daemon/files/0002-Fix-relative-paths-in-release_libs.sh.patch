@@ -1,0 +1,26 @@
+From d965c304549ddbf8447c133b90da525eee180b1a Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Tue, 14 May 2024 11:10:47 +0200
+Subject: [PATCH 2/5] Fix relative paths in release_libs.sh
+
+---
+ release_libs.sh | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/release_libs.sh b/release_libs.sh
+index a6235a18c..394728308 100755
+--- a/release_libs.sh
++++ b/release_libs.sh
+@@ -1,6 +1,9 @@
+ #!/bin/bash
+ 
+ set -x -e
++
++cd "$(dirname -- "$0")"
++
+ BUILD_TYPE=${BUILD_TYPE:-prod}
+ RELEASE_ROOT=${RELEASE_ROOT:-./prebuilts/http_root/api/v1}
+ echo "Release libs to ${RELEASE_ROOT}"
+-- 
+2.44.0
+

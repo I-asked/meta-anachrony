@@ -1,0 +1,49 @@
+From 2eb74cc35d14ce7c2485fd53ec9fb9c97557d941 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Sat, 18 May 2024 16:51:58 +0200
+Subject: [PATCH] Force disable CLOCK_MONOTONIC
+
+---
+ js/src/old-configure.in | 7 -------
+ old-configure.in        | 7 -------
+ 2 files changed, 14 deletions(-)
+
+diff --git a/js/src/old-configure.in b/js/src/old-configure.in
+index 39b66ebe4264..e278f7f2546e 100644
+--- a/js/src/old-configure.in
++++ b/js/src/old-configure.in
+@@ -699,13 +699,6 @@ dnl availability attribute strict, so that compilation fails when the target is
+                                  ac_cv_clock_monotonic=no)
+                     LIBS="$_SAVE_LIBS"
+                 done])
+-if test "$ac_cv_clock_monotonic" != "no"; then
+-    HAVE_CLOCK_MONOTONIC=1
+-    REALTIME_LIBS=$ac_cv_clock_monotonic
+-    AC_DEFINE(HAVE_CLOCK_MONOTONIC)
+-    AC_SUBST(HAVE_CLOCK_MONOTONIC)
+-    AC_SUBST_LIST(REALTIME_LIBS)
+-fi
+ 
+ dnl Checks for math functions.
+ dnl ========================================================
+diff --git a/old-configure.in b/old-configure.in
+index cd1a8a8d6731..f77cdd5fd8e3 100644
+--- a/old-configure.in
++++ b/old-configure.in
+@@ -740,13 +740,6 @@ dnl availability attribute strict, so that compilation fails when the target is
+                                  ac_cv_clock_monotonic=no)
+                     LIBS="$_SAVE_LIBS"
+                 done])
+-if test "$ac_cv_clock_monotonic" != "no"; then
+-    HAVE_CLOCK_MONOTONIC=1
+-    REALTIME_LIBS=$ac_cv_clock_monotonic
+-    AC_DEFINE(HAVE_CLOCK_MONOTONIC)
+-    AC_SUBST(HAVE_CLOCK_MONOTONIC)
+-    AC_SUBST_LIST(REALTIME_LIBS)
+-fi
+ 
+ AC_CACHE_CHECK(
+     [for res_ninit()],
+-- 
+2.44.0
+

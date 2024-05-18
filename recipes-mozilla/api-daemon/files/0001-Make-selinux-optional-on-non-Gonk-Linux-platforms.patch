@@ -1,0 +1,58 @@
+From 26b0bc7d4a3da2c1bfa65baf03ef706cf3a66e2b Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Tue, 14 May 2024 11:04:02 +0200
+Subject: [PATCH 1/5] Make selinux optional on non-Gonk Linux platforms
+
+---
+ common/src/selinux.rs | 22 +++++++++-------------
+ 1 file changed, 9 insertions(+), 13 deletions(-)
+
+diff --git a/common/src/selinux.rs b/common/src/selinux.rs
+index 08d67fc88..fb2a32431 100644
+--- a/common/src/selinux.rs
++++ b/common/src/selinux.rs
+@@ -1,15 +1,11 @@
+ /// A simple selinux wrapper.
+ 
+-#[cfg(not(target_os = "macos"))]
+-mod ffi {
+-    use std::os::raw::c_int;
+-
+-    #[link(name = "selinux")]
+-    extern "C" {
+-        #[cfg(target_os = "android")]
+-        pub fn setcon(context: *const libc::c_char) -> c_int;
+-        pub fn security_getenforce() -> c_int;
+-    }
++#[cfg(target_os = "android")]
++#[link(name = "selinux")]
++extern "C" {
++    #[cfg(target_os = "android")]
++    pub fn setcon(context: *const libc::c_char) -> c_int;
++    pub fn security_getenforce() -> c_int;
+ }
+ 
+ #[derive(Debug, PartialEq)]
+@@ -31,7 +27,7 @@ impl SeLinux {
+         res == 0
+     }
+ 
+-    #[cfg(not(target_os = "macos"))]
++    #[cfg(target_os = "android")]
+     pub fn getenforce() -> Result<SeLinuxEnforceState, String> {
+         let res = unsafe { ffi::security_getenforce() };
+ 
+@@ -46,8 +42,8 @@ impl SeLinux {
+         }
+     }
+ 
+-    #[cfg(target_os = "macos")]
++    #[cfg(not(target_os = "android"))]
+     pub fn getenforce() -> Result<SeLinuxEnforceState, String> {
+-        Ok(SeLinuxEnforceState::Enforcing)
++        Ok(SeLinuxEnforceState::Disabled)
+     }
+ }
+-- 
+2.44.0
+

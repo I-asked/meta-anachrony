@@ -1,0 +1,27 @@
+From 3e3e8be3a4df51f64b3ad8ba056460fcced3f500 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Tue, 14 May 2024 11:14:34 +0200
+Subject: [PATCH 3/5] Disable libsignal in release_libs.sh
+
+---
+ release_libs.sh | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/release_libs.sh b/release_libs.sh
+index 394728308..0b1e3a057 100755
+--- a/release_libs.sh
++++ b/release_libs.sh
+@@ -25,9 +25,7 @@ release_service_lib audiovolumemanager ${RELEASE_ROOT} ${BUILD_TYPE}
+ release_service_lib contacts ${RELEASE_ROOT} ${BUILD_TYPE}
+ release_service_lib contentmanager ${RELEASE_ROOT} ${BUILD_TYPE}
+ release_service_lib devicecapability ${RELEASE_ROOT} ${BUILD_TYPE}
+-release_service_lib dweb ${RELEASE_ROOT} ${BUILD_TYPE}
+-release_service_lib evm ${RELEASE_ROOT} ${BUILD_TYPE}
+-# release_service_lib libsignal ${RELEASE_ROOT} ${BUILD_TYPE}
++#release_service_lib libsignal ${RELEASE_ROOT} ${BUILD_TYPE}
+ release_service_lib powermanager ${RELEASE_ROOT} ${BUILD_TYPE}
+ release_service_lib procmanager ${RELEASE_ROOT} ${BUILD_TYPE}
+ release_service_lib settings ${RELEASE_ROOT} ${BUILD_TYPE}
+-- 
+2.44.0
+

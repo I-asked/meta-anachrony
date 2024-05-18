@@ -1,12 +1,14 @@
 inherit mozilla
 
 SUMMARY = "Boot to Gecko"
-HOMEPAGE = "https://github.com/I-asked/gecko-b2g"
+HOMEPAGE = "https://github.com/capyloon/gecko-b2g"
 LICENSE = "MPL-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=dc9b6ecd19a14a54a628edaaf23733bf"
 
-SRC_URI += "git://github.com/I-asked/gecko-b2g.git;protocol=https;branch=chronology \
-            file://0001-Obtain-Rust-Triple-From-OE.patch \
+SRC_URI += "git://github.com/capyloon/gecko-b2g.git;protocol=https;branch=capyloon \
+            recipes-mozilla/mozilla/b2g/0001-Obtain-Rust-Triple-From-OE.patch \
+            recipes-mozilla/mozilla/b2g/0002-Make-kiosk-NOT-run-in-fullscreen.patch \
+            recipes-mozilla/mozilla/b2g/0003-Force-disable-CLOCK_MONOTONIC.patch \
             file://b2g.service \
            "
 
