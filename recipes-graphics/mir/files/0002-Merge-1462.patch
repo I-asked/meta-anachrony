@@ -1,0 +1,248 @@
+From 8bd705b315f01d497c4c7467f5bbadf1a0bee7fd Mon Sep 17 00:00:00 2001
+From: "bors[bot]" <26634292+bors[bot]@users.noreply.github.com>
+Date: Tue, 12 May 2020 10:48:07 +0000
+Subject: [PATCH 2/2] Merge #1462
+
+1462: Wayland: move visibility() logic into commit() r=AlanGriffiths a=wmww
+
+This fixes some problems with subsurfaces mapping and unmapping, and removes the now-unneeded `visibility()` function from the window role interface. This should get simpler once we sort out buffer streams.
+
+Co-authored-by: William Wold <wm@wmww.sh>
+---
+ .../window_wl_surface_role.cpp                | 32 ++++++-----------
+ .../frontend_wayland/window_wl_surface_role.h |  2 --
+ .../frontend_wayland/wl_subcompositor.cpp     | 22 ++++++++----
+ .../frontend_wayland/wl_subcompositor.h       |  1 -
+ src/server/frontend_wayland/wl_surface.cpp    |  3 --
+ src/server/frontend_wayland/wl_surface.h      |  1 -
+ src/server/frontend_wayland/wl_surface_role.h |  1 -
+ .../xwayland_surface_role.cpp                 | 34 +++++++++++++++----
+ .../frontend_xwayland/xwayland_surface_role.h |  1 -
+ 9 files changed, 53 insertions(+), 44 deletions(-)
+
+diff --git a/src/server/frontend_wayland/window_wl_surface_role.cpp b/src/server/frontend_wayland/window_wl_surface_role.cpp
+index 779d044b98..0c38090a40 100644
+--- a/src/server/frontend_wayland/window_wl_surface_role.cpp
++++ b/src/server/frontend_wayland/window_wl_surface_role.cpp
+@@ -367,6 +367,17 @@ void mf::WindowWlSurfaceRole::commit(WlSurfaceState const& state)
+ 
+     if (auto const scene_surface = weak_scene_surface.lock())
+     {
++        bool const is_mapped = scene_surface->visible();
++        bool const should_be_mapped = static_cast<bool>(surface->buffer_size());
++        if (!is_mapped && should_be_mapped)
++        {
++            spec().state = mir_window_state_restored;
++        }
++        else if (is_mapped && !should_be_mapped)
++        {
++            spec().state = mir_window_state_hidden;
++        }
++
+         if (!committed_size || size != committed_size.value())
+         {
+             spec().width = size.width;
+@@ -405,27 +416,6 @@ void mf::WindowWlSurfaceRole::commit(WlSurfaceState const& state)
+     pending_explicit_height = std::experimental::nullopt;
+ }
+ 
+-void mf::WindowWlSurfaceRole::visiblity(bool visible)
+-{
+-    auto const scene_surface = weak_scene_surface.lock();
+-    if (!scene_surface)
+-        return;
+-
+-    if (scene_surface->visible() == visible)
+-        return;
+-
+-    if (visible)
+-    {
+-        if (scene_surface->state() == mir_window_state_hidden)
+-            spec().state = mir_window_state_restored;
+-    }
+-    else
+-    {
+-        if (scene_surface->state() != mir_window_state_hidden)
+-            spec().state = mir_window_state_hidden;
+-    }
+-}
+-
+ mir::shell::SurfaceSpecification& mf::WindowWlSurfaceRole::spec()
+ {
+     if (!pending_changes)
+diff --git a/src/server/frontend_wayland/window_wl_surface_role.h b/src/server/frontend_wayland/window_wl_surface_role.h
+index f66975a88c..efd677c751 100644
+--- a/src/server/frontend_wayland/window_wl_surface_role.h
++++ b/src/server/frontend_wayland/window_wl_surface_role.h
+@@ -151,8 +151,6 @@ private:
+ 
+     std::unique_ptr<shell::SurfaceSpecification> pending_changes;
+ 
+-    void visiblity(bool visible) override;
+-
+     shell::SurfaceSpecification& spec();
+ };
+ 
+diff --git a/src/server/frontend_wayland/wl_subcompositor.cpp b/src/server/frontend_wayland/wl_subcompositor.cpp
+index 7be71ae8c1..6ab53889f5 100644
+--- a/src/server/frontend_wayland/wl_subcompositor.cpp
++++ b/src/server/frontend_wayland/wl_subcompositor.cpp
+@@ -94,7 +94,11 @@ void mf::WlSubsurface::populate_surface_data(std::vector<shell::StreamSpecificat
+                                              std::vector<mir::geometry::Rectangle>& input_shape_accumulator,
+                                              geometry::Displacement const& parent_offset) const
+ {
+-    surface->populate_surface_data(buffer_streams, input_shape_accumulator, parent_offset);
++    if (surface->buffer_size())
++    {
++        // surface is mapped
++        surface->populate_surface_data(buffer_streams, input_shape_accumulator, parent_offset);
++    }
+ }
+ 
+ bool mf::WlSubsurface::synchronized() const
+@@ -166,6 +170,16 @@ void mf::WlSubsurface::commit(WlSurfaceState const& state)
+ 
+     cached_state.value().update_from(state);
+ 
++    if (cached_state.value().buffer)
++    {
++        auto const currently_mapped = static_cast<bool>(surface->buffer_size());
++        auto const pending_mapped = cached_state.value().buffer.value() != nullptr;
++        if (currently_mapped != pending_mapped)
++        {
++            cached_state.value().invalidate_surface_data();
++        }
++    }
++
+     if (synchronized())
+     {
+         if (cached_state.value().surface_data_needs_refresh() && !*parent_destroyed)
+@@ -179,9 +193,3 @@ void mf::WlSubsurface::commit(WlSurfaceState const& state)
+         cached_state = std::experimental::nullopt;
+     }
+ }
+-
+-void mf::WlSubsurface::visiblity(bool visible)
+-{
+-    (void)visible;
+-    log_warning("TODO: wl_subsurface.visiblity not implemented");
+-}
+diff --git a/src/server/frontend_wayland/wl_subcompositor.h b/src/server/frontend_wayland/wl_subcompositor.h
+index 2077e34a64..8a6ff0f1a3 100644
+--- a/src/server/frontend_wayland/wl_subcompositor.h
++++ b/src/server/frontend_wayland/wl_subcompositor.h
+@@ -77,7 +77,6 @@ private:
+ 
+     void refresh_surface_data_now() override;
+     virtual void commit(WlSurfaceState const& state) override;
+-    virtual void visiblity(bool visible) override;
+ 
+     WlSurface* const surface;
+     // manages parent/child relationship, but does not manage parent's memory
+diff --git a/src/server/frontend_wayland/wl_surface.cpp b/src/server/frontend_wayland/wl_surface.cpp
+index c7c497a423..105976493b 100644
+--- a/src/server/frontend_wayland/wl_surface.cpp
++++ b/src/server/frontend_wayland/wl_surface.cpp
+@@ -254,8 +254,6 @@ void mf::WlSurface::attach(std::experimental::optional<wl_resource*> const& buff
+         mir::log_warning("Client requested unimplemented non-zero attach offset. Rendering will be incorrect.");
+     }
+ 
+-    role->visiblity(!!buffer);
+-
+     pending.buffer = buffer.value_or(nullptr);
+ }
+ 
+@@ -438,5 +436,4 @@ auto mf::NullWlSurfaceRole::scene_surface() const -> std::experimental::optional
+ }
+ void mf::NullWlSurfaceRole::refresh_surface_data_now() {}
+ void mf::NullWlSurfaceRole::commit(WlSurfaceState const& state) { surface->commit(state); }
+-void mf::NullWlSurfaceRole::visiblity(bool /*visible*/) {}
+ void mf::NullWlSurfaceRole::destroy() {}
+diff --git a/src/server/frontend_wayland/wl_surface.h b/src/server/frontend_wayland/wl_surface.h
+index ad6a35ad66..51820e57cb 100644
+--- a/src/server/frontend_wayland/wl_surface.h
++++ b/src/server/frontend_wayland/wl_surface.h
+@@ -100,7 +100,6 @@ public:
+     auto scene_surface() const -> std::experimental::optional<std::shared_ptr<scene::Surface>> override;
+     void refresh_surface_data_now() override;
+     void commit(WlSurfaceState const& state) override;
+-    void visiblity(bool /*visible*/) override;
+     void destroy() override;
+ 
+ private:
+diff --git a/src/server/frontend_wayland/wl_surface_role.h b/src/server/frontend_wayland/wl_surface_role.h
+index bfb25794bc..42c8838721 100644
+--- a/src/server/frontend_wayland/wl_surface_role.h
++++ b/src/server/frontend_wayland/wl_surface_role.h
+@@ -45,7 +45,6 @@ public:
+     virtual auto scene_surface() const -> std::experimental::optional<std::shared_ptr<scene::Surface>> = 0;
+     virtual void refresh_surface_data_now() = 0;
+     virtual void commit(WlSurfaceState const& state) = 0;
+-    virtual void visiblity(bool visible) = 0;
+     virtual void destroy() = 0;
+     virtual ~WlSurfaceRole() = default;
+ };
+diff --git a/src/server/frontend_xwayland/xwayland_surface_role.cpp b/src/server/frontend_xwayland/xwayland_surface_role.cpp
+index 2b452a01f5..df2741e1c0 100644
+--- a/src/server/frontend_xwayland/xwayland_surface_role.cpp
++++ b/src/server/frontend_xwayland/xwayland_surface_role.cpp
+@@ -91,17 +91,37 @@ void mf::XWaylandSurfaceRole::commit(WlSurfaceState const& state)
+ 
+     wl_surface->commit(state);
+ 
+-    if (state.surface_data_needs_refresh())
++    auto const surface = this->scene_surface();
++    auto const session = surface ? surface.value()->session().lock() : nullptr;
++    if (surface && session)
+     {
+-        refresh_surface_data_now();
++        shell::SurfaceSpecification spec;
++
++        bool const is_mapped = surface.value()->visible();
++        bool const should_be_mapped = static_cast<bool>(wl_surface->buffer_size());
++        if (!is_mapped && should_be_mapped)
++        {
++            spec.state = mir_window_state_restored;
++        }
++        else if (is_mapped && !should_be_mapped)
++        {
++            spec.state = mir_window_state_hidden;
++        }
++
++        if (state.surface_data_needs_refresh())
++        {
++            spec.streams = std::vector<shell::StreamSpecification>();
++            spec.input_shape = std::vector<geom::Rectangle>();
++            wl_surface->populate_surface_data(spec.streams.value(), spec.input_shape.value(), {});
++        }
++
++        if (!spec.is_empty())
++        {
++            shell->modify_surface(session, surface.value(), spec);
++        }
+     }
+ }
+ 
+-void mf::XWaylandSurfaceRole::visiblity(bool /*visible*/)
+-{
+-    // TODO?
+-}
+-
+ void mf::XWaylandSurfaceRole::destroy()
+ {
+     if (auto const wm_surface = weak_wm_surface.lock())
+diff --git a/src/server/frontend_xwayland/xwayland_surface_role.h b/src/server/frontend_xwayland/xwayland_surface_role.h
+index 180fcc09a8..f8e119ef72 100644
+--- a/src/server/frontend_xwayland/xwayland_surface_role.h
++++ b/src/server/frontend_xwayland/xwayland_surface_role.h
+@@ -59,7 +59,6 @@ private:
+     auto scene_surface() const -> std::experimental::optional<std::shared_ptr<scene::Surface>> override;
+     void refresh_surface_data_now() override;
+     void commit(WlSurfaceState const& state) override;
+-    void visiblity(bool visible) override;
+     void destroy() override;
+     /// @}
+ };
+-- 
+2.44.0
+
