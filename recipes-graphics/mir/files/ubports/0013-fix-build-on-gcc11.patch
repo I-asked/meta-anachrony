@@ -1,0 +1,44 @@
+diff --git a/examples/mirclient/client_helpers.cpp b/examples/mirclient/client_helpers.cpp
+index b128ef0..b2b6574 100644
+--- a/examples/mirclient/client_helpers.cpp
++++ b/examples/mirclient/client_helpers.cpp
+@@ -20,6 +20,7 @@
+ #include "mir_toolkit/mir_client_library.h"
+ #include <unistd.h>
+ #include <signal.h>
++#include <stdexcept>
+ 
+ namespace me = mir::examples;
+ 
+diff --git a/src/client/lttng/CMakeLists.txt b/src/client/lttng/CMakeLists.txt
+index 04a8bf2..0c3d14e 100644
+--- a/src/client/lttng/CMakeLists.txt
++++ b/src/client/lttng/CMakeLists.txt
+@@ -10,11 +10,6 @@ add_library(
+   perf_report.cpp
+ )
+ 
+-# Using LTO on the lttng DSO causes a gcc ICE.
+-# Since LTO is reasonably uninteresting for the lttng tracer, disable it.
+-string(REPLACE "-flto" "" NO_LTO_FLAGS ${CMAKE_C_FLAGS})
+-set(CMAKE_C_FLAGS ${NO_LTO_FLAGS})
+-
+ # lttng-ust uses urcu headers which contain code blocks inside expressions 
+ # this is a gnu extension.
+ string(REPLACE "-pedantic" "" NO_PEDANTIC_CHECK_FLAGS ${CMAKE_CXX_FLAGS})
+diff --git a/src/server/report/lttng/CMakeLists.txt b/src/server/report/lttng/CMakeLists.txt
+index a03cd03..2bccba6 100644
+--- a/src/server/report/lttng/CMakeLists.txt
++++ b/src/server/report/lttng/CMakeLists.txt
+@@ -9,11 +9,6 @@ add_compile_options(
+   -Wno-error=unused-parameter
+ )
+ 
+-# Using LTO on the lttng DSO causes a gcc ICE.
+-# Since LTO is reasonably uninteresting for the lttng tracer, disable it.
+-string(REPLACE "-flto" "" NO_LTO_FLAGS ${CMAKE_C_FLAGS})
+-set(CMAKE_C_FLAGS ${NO_LTO_FLAGS})
+-
+ if (LTTNG_UST_VERSION VERSION_GREATER 2.9)
+     add_definitions(-DMIR_LTTNG_HAS_VOID_TRACEPOINTS)
+ endif()

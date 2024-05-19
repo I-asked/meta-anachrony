@@ -1,0 +1,44 @@
+From 78a84184fad10cf13861020c5d3149825cf48122 Mon Sep 17 00:00:00 2001
+From: NeKit <nekit1000@gmail.com>
+Date: Sat, 18 Nov 2017 23:54:07 +0300
+Subject: [PATCH 03/10] Add X11NativeWindow::getUsage() according to
+ NativeWindowBase changes
+
+---
+ hybris/egl/platforms/x11/x11_window.cpp | 7 +++++++
+ hybris/egl/platforms/x11/x11_window.h   | 1 +
+ 2 files changed, 8 insertions(+)
+
+diff --git a/hybris/egl/platforms/x11/x11_window.cpp b/hybris/egl/platforms/x11/x11_window.cpp
+index aef18f3..899e648 100644
+--- a/hybris/egl/platforms/x11/x11_window.cpp
++++ b/hybris/egl/platforms/x11/x11_window.cpp
+@@ -436,6 +436,13 @@ unsigned int X11NativeWindow::transformHint() const {
+     return 0;
+ }
+ 
++/*
++ * returns the current usage of this window
++ */
++unsigned int X11NativeWindow::getUsage() const {
++    return m_usage;
++}
++
+ int X11NativeWindow::setBuffersFormat(int format) {
+ //     if (format != m_format)
+ //     {
+diff --git a/hybris/egl/platforms/x11/x11_window.h b/hybris/egl/platforms/x11/x11_window.h
+index 10bef0a..b719fb1 100644
+--- a/hybris/egl/platforms/x11/x11_window.h
++++ b/hybris/egl/platforms/x11/x11_window.h
+@@ -145,6 +145,7 @@ protected:
+     virtual unsigned int defaultHeight() const;
+     virtual unsigned int queueLength() const;
+     virtual unsigned int transformHint() const;
++    virtual unsigned int getUsage() const;
+     // perform calls
+     virtual int setUsage(int usage);
+     virtual int setBuffersFormat(int format);
+-- 
+2.44.0
+

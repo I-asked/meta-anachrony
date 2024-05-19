@@ -17,5 +17,5 @@ inherit cmake pkgconfig
 
 do_install:append () {
     install -d ${D}${libdir}/systemd/user/startup-precondition.target.wants/
-    ls -fs ../fireplace.service ${D}${libdir}/systemd/user/startup-precondition.target.wants/
+    ln -fs ../fireplace.service ${D}${libdir}/systemd/user/startup-precondition.target.wants/
 }

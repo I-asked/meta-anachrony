@@ -133,10 +133,12 @@ user_pref("widget.use-xdg-desktop-portal.settings", 0);
 user_pref("gfx.webrender.enabled", true);
 user_pref("gfx.webrender.all", true);
 user_pref("gfx.webrender.compositor", true);
-user_pref("gfx.webrender.compositor.force-enabled", true);
 
 // Enable pipewire camera
 user_pref("media.webrtc.camera.allow-pipewire", true);
+
+// Enable WebGL everywhere
+user_pref("webgl.force-enabled", true);
 EOF
 mkdir -p "${HOME}/.b2g/profile/webapps/"
 ln -sf "/opt/b2g/webapps/system" "${HOME}/.b2g/profile/webapps/"

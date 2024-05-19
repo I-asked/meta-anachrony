@@ -1,0 +1,40 @@
+From 307c406a06b67192b9d953a574ca290e42da633c Mon Sep 17 00:00:00 2001
+From: Marius Gripsgard <marius@ubports.com>
+Date: Thu, 14 May 2020 03:42:25 +0200
+Subject: [DO NOT MERGE] Temp fix for wrongly scaled buffers
+
+[ratchanan@ubports.com: I don't understand what this patch does, but it's
+ included here because it's a part of the original xenial branch.]
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/platform/graphics/display_configuration.cpp | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/platform/graphics/display_configuration.cpp b/src/platform/graphics/display_configuration.cpp
+index fa19499387..9238bb919b 100644
+--- a/src/platform/graphics/display_configuration.cpp
++++ b/src/platform/graphics/display_configuration.cpp
+@@ -237,14 +237,14 @@ mir::geometry::Rectangle extents_of(
+     size_t current_mode_index,
+     MirOrientation orientation,
+     mir::geometry::Point top_left,
+-    float scale)
++    float)
+ {
+     if (current_mode_index >= modes.size())
+         return mir::geometry::Rectangle();
+ 
+     mir::geometry::Size const size{
+-        roundf(modes[current_mode_index].size.width.as_int() / scale),
+-        roundf(modes[current_mode_index].size.height.as_int() / scale)};
++        roundf(modes[current_mode_index].size.width.as_int()),
++        roundf(modes[current_mode_index].size.height.as_int())};
+ 
+     if (orientation == mir_orientation_normal ||
+         orientation == mir_orientation_inverted)
+-- 
+2.25.1
+

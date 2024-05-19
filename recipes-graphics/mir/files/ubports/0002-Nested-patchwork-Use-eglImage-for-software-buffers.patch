@@ -1,0 +1,100 @@
+From 3d66313e89192863bef93dd7bb9b63079f25db9d Mon Sep 17 00:00:00 2001
+From: Dalton Durst <d@ltondur.st>
+Date: Tue, 17 Mar 2020 16:04:33 -0500
+Subject: Nested patchwork: Use eglImage for software buffers
+
+Some Android platforms return a buffer with a stride longer than their
+width. This wreaks havoc on the glTexImage2D() call, which expects
+stride to exactly equal width*bytesPerPixel. This caused software
+rendering clients to experience display corruption.
+
+To fix this, replace the glTexImage2D() calls with the eglImage usage
+seen in hardware buffers. This would break mesa platforms, but we do
+not have any platforms using this version of Mir with Mesa.
+
+Better solutions would involve falling back to the gl texture calls
+when EGLExtensions can't be created, or otherwise falling back to
+preserve the possibility of software rendering with nested. However,
+nested is removed in newer versions of Mir. We're essentially
+supporting unwanted code as it is and replacing our use of nested on
+most new platforms, like the PinePhone and Raspberry Pi.
+
+Fixes https://github.com/ubports/ubuntu-touch/issues/1399
+
+Origin: vendor
+Bug-UBports: https://github.com/ubports/ubuntu-touch/issues/1399
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/server/graphics/nested/buffer.cpp | 41 +++++++++++++++++++++++----
+ 1 file changed, 36 insertions(+), 5 deletions(-)
+
+diff --git a/src/server/graphics/nested/buffer.cpp b/src/server/graphics/nested/buffer.cpp
+index 1617da20f3..905f1757e9 100644
+--- a/src/server/graphics/nested/buffer.cpp
++++ b/src/server/graphics/nested/buffer.cpp
+@@ -135,6 +135,14 @@ public:
+             BOOST_THROW_EXCEPTION(std::logic_error("buffer cannot be used as texture"));
+     }
+ 
++    ~PixelAndTextureAccess() {
++    	for(auto& it : egl_image_map)
++    	{
++            EGLDisplay disp = it.first.first;
++            extensions.eglDestroyImageKHR(disp, it.second);
++    	}
++    }
++
+     void write(unsigned char const* pixels, size_t pixel_size) override
+     {
+         auto bpp = MIR_BYTES_PER_PIXEL(buffer.pixel_format());
+@@ -167,11 +175,31 @@ public:
+ 
+     void bind() override
+     {
+-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+-        glTexImage2D(
+-            GL_TEXTURE_2D, 0, format,
+-            buffer.size().width.as_int(), buffer.size().height.as_int(),
+-            0, format, type, native_buffer->get_graphics_region()->vaddr);
++        using namespace std::chrono;
++        native_buffer->sync(mir_read, duration_cast<nanoseconds>(seconds(1)));
++
++        ImageResources resources
++        {
++            eglGetCurrentDisplay(),
++            eglGetCurrentContext()
++        };
++
++        EGLImageKHR image;
++        auto it = egl_image_map.find(resources);
++        if (it == egl_image_map.end())
++        {
++            auto hints = native_buffer->egl_image_creation_hints();
++            image = extensions.eglCreateImageKHR(
++                    resources.first, EGL_NO_CONTEXT,
++                    std::get<0>(hints), std::get<1>(hints), std::get<2>(hints));
++            egl_image_map[resources] = image;
++        }
++        else
++        {
++            image = it->second;
++        }
++
++        extensions.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+     }
+ 
+     void gl_bind_to_texture() override
+@@ -187,6 +215,9 @@ private:
+     mgn::Buffer& buffer;
+     std::shared_ptr<mgn::NativeBuffer> const native_buffer;
+     geom::Stride const stride_;
++    typedef std::pair<EGLDisplay, EGLContext> ImageResources;
++    std::map<ImageResources, EGLImageKHR> egl_image_map;
++    mg::EGLExtensions extensions;
+     GLenum format;
+     GLenum type;
+ };
+-- 
+2.25.1
+

@@ -1,0 +1,65 @@
+From b21d4c5156e2534f187834832b476f8d55360552 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Sun, 22 Nov 2020 20:22:46 +0200
+Subject: Enable nested platform BufferAllocator to pass WaylandAllocator
+ methods
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/server/graphics/nested/platform.cpp | 24 +++++++++++++++++++++++-
+ 1 file changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/src/server/graphics/nested/platform.cpp b/src/server/graphics/nested/platform.cpp
+index d7818e4819..2af2962703 100644
+--- a/src/server/graphics/nested/platform.cpp
++++ b/src/server/graphics/nested/platform.cpp
+@@ -24,6 +24,7 @@
+ #include "ipc_operations.h"
+ #include "mir/shared_library.h"
+ #include "mir/graphics/graphic_buffer_allocator.h"
++#include "mir/graphics/wayland_allocator.h"
+ #include "mir/graphics/display.h"
+ #include "mir/graphics/platform_ipc_operations.h"
+ #include "mir/options/option.h"
+@@ -64,7 +65,7 @@ mgn::NestedBufferPlatform::NestedBufferPlatform(
+ 
+ namespace
+ {
+-class BufferAllocator : public mg::GraphicBufferAllocator
++class BufferAllocator : public mg::GraphicBufferAllocator, public mg::WaylandAllocator
+ {
+ public:
+     BufferAllocator(
+@@ -102,6 +103,27 @@ public:
+         return guest_allocator->supported_pixel_formats();
+     }
+ 
++    // WaylandAllocator
++    void bind_display(wl_display* display, std::shared_ptr<mir::Executor> wayland_executor) override
++    {
++        if (auto allocator = std::dynamic_pointer_cast<mg::WaylandAllocator>(guest_allocator))
++        {
++            allocator->bind_display(display, std::move(wayland_executor));
++        }
++    }
++
++    std::shared_ptr<mg::Buffer> buffer_from_resource(
++        wl_resource* buffer,
++        std::function<void()>&& on_consumed,
++        std::function<void()>&& on_release) override
++    {
++        if (auto allocator = std::dynamic_pointer_cast<mg::WaylandAllocator>(guest_allocator))
++        {
++            return allocator->buffer_from_resource(buffer, std::move(on_consumed), std::move(on_release));
++        }
++        return nullptr;
++    }
++
+ private:
+     bool passthrough_candidate(mir::geometry::Size size, mg::BufferUsage usage)
+     {
+-- 
+2.25.1
+

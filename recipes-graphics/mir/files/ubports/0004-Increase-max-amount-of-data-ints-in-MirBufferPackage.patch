@@ -1,0 +1,28 @@
+From 881c57beaf9d85ca64b1201ff6229835465eb7cf Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Wed, 6 Jan 2021 18:31:03 +0200
+Subject: Increase max amount of data ints in MirBufferPackage
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ include/core/mir_toolkit/mir_native_buffer.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/core/mir_toolkit/mir_native_buffer.h b/include/core/mir_toolkit/mir_native_buffer.h
+index a33c04d100..132456af9f 100644
+--- a/include/core/mir_toolkit/mir_native_buffer.h
++++ b/include/core/mir_toolkit/mir_native_buffer.h
+@@ -20,7 +20,7 @@
+ #ifndef MIR_CLIENT_MIR_NATIVE_BUFFER_H_
+ #define MIR_CLIENT_MIR_NATIVE_BUFFER_H_
+ 
+-enum { mir_buffer_package_max = 30 };
++enum { mir_buffer_package_max = 128 };
+ 
+ typedef enum
+ {
+-- 
+2.25.1
+

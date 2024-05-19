@@ -1,0 +1,317 @@
+From 0c32c855cba1f6b20872239490176403554682a5 Mon Sep 17 00:00:00 2001
+From: Alan Griffiths <alan@octopull.co.uk>
+Date: Wed, 2 Sep 2020 12:45:33 +0100
+Subject: [PATCH 1/5] [Wayland-platform] Compositing shouldn't block in
+ eglSwapBuffers()
+
+Origin: upstream, https://github.com/MirServer/mir/pull/1694
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/platforms/wayland/displayclient.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/platforms/wayland/displayclient.cpp b/src/platforms/wayland/displayclient.cpp
+index 90bf30dd02..b21e0588d4 100644
+--- a/src/platforms/wayland/displayclient.cpp
++++ b/src/platforms/wayland/displayclient.cpp
+@@ -358,6 +358,11 @@ void mgw::DisplayClient::Output::release_current()
+ 
+ void mgw::DisplayClient::Output::swap_buffers()
+ {
++    // Avoid throttling compositing by blocking in eglSwapBuffers().
++    // NB We can likely do even better by adding a frame callback
++    // and using that to schedule composition
++    eglSwapInterval(owner->egldisplay, 0);
++
+     if (eglSwapBuffers(owner->egldisplay, eglsurface) != EGL_TRUE)
+         BOOST_THROW_EXCEPTION(egl_error("Failed to perform buffer swap"));
+ }
+
+From 88fce578cc7042a497410dadcaab2bcf1287a94a Mon Sep 17 00:00:00 2001
+From: Alan Griffiths <alan@octopull.co.uk>
+Date: Wed, 2 Sep 2020 15:47:39 +0100
+Subject: [PATCH 2/5] Add frame callback
+
+---
+ src/platforms/wayland/displayclient.cpp | 35 ++++++++++++++++++++++---
+ 1 file changed, 32 insertions(+), 3 deletions(-)
+
+diff --git a/src/platforms/wayland/displayclient.cpp b/src/platforms/wayland/displayclient.cpp
+index b21e0588d4..b0378c6526 100644
+--- a/src/platforms/wayland/displayclient.cpp
++++ b/src/platforms/wayland/displayclient.cpp
+@@ -28,10 +28,11 @@
+ 
+ #include <boost/throw_exception.hpp>
+ 
++#include <algorithm>
++#include <condition_variable>
+ #include <cstring>
+ #include <stdlib.h>
+ #include <system_error>
+-#include <algorithm>
+ 
+ namespace mgw = mir::graphics::wayland;
+ 
+@@ -94,6 +95,12 @@ class mgw::DisplayClient::Output  :
+ 
+     std::function<void(Output const&)> on_done;
+ 
++    std::mutex frame_mutex;
++    bool frame_posted = false;
++    std::condition_variable frame_cv;
++
++    void frame_done(struct wl_callback* callback, uint32_t time);
++
+     // DisplaySyncGroup implementation
+     void for_each_display_buffer(std::function<void(DisplayBuffer&)> const& /*f*/) override;
+     void post() override;
+@@ -313,8 +320,18 @@ void mgw::DisplayClient::Output::for_each_display_buffer(std::function<void(Disp
+     f(*this);
+ }
+ 
++void mgw::DisplayClient::Output::frame_done(struct wl_callback* callback, uint32_t /*time*/) {
++    wl_callback_destroy(callback);
++
++    std::lock_guard<decltype(frame_mutex)> lock{frame_mutex};
++    frame_posted = true;
++    frame_cv.notify_all();
++}
++
+ void mgw::DisplayClient::Output::post()
+ {
++    std::unique_lock<decltype(frame_mutex)> lock{frame_mutex};
++    frame_cv.wait(lock, [this]{ return frame_posted; });
+ }
+ 
+ auto mgw::DisplayClient::Output::recommended_sleep() const -> std::chrono::milliseconds
+@@ -359,10 +376,22 @@ void mgw::DisplayClient::Output::release_current()
+ void mgw::DisplayClient::Output::swap_buffers()
+ {
+     // Avoid throttling compositing by blocking in eglSwapBuffers().
+-    // NB We can likely do even better by adding a frame callback
+-    // and using that to schedule composition
+     eglSwapInterval(owner->egldisplay, 0);
+ 
++    static struct wl_callback_listener const frame_listener =
++        {
++            [](void* data, auto... args)
++                { static_cast<mgw::DisplayClient::Output*>(data)->frame_done(args...); },
++        };
++
++    struct wl_callback *callback = wl_surface_frame(surface);
++    wl_callback_add_listener(callback, &frame_listener, this);
++
++    {
++        std::lock_guard<decltype(frame_mutex)> lock{frame_mutex};
++        frame_posted = false;
++    }
++
+     if (eglSwapBuffers(owner->egldisplay, eglsurface) != EGL_TRUE)
+         BOOST_THROW_EXCEPTION(egl_error("Failed to perform buffer swap"));
+ }
+
+From 8f13b4afc4271467030f1c8afc9d0bc3e96d76f3 Mon Sep 17 00:00:00 2001
+From: Alan Griffiths <alan@octopull.co.uk>
+Date: Wed, 9 Sep 2020 09:37:06 +0100
+Subject: [PATCH 3/5] Localise the synchronization changes
+
+---
+ src/platforms/wayland/displayclient.cpp | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/src/platforms/wayland/displayclient.cpp b/src/platforms/wayland/displayclient.cpp
+index b0378c6526..3d93f996ce 100644
+--- a/src/platforms/wayland/displayclient.cpp
++++ b/src/platforms/wayland/displayclient.cpp
+@@ -330,8 +330,6 @@ void mgw::DisplayClient::Output::frame_done(struct wl_callback* callback, uint32
+ 
+ void mgw::DisplayClient::Output::post()
+ {
+-    std::unique_lock<decltype(frame_mutex)> lock{frame_mutex};
+-    frame_cv.wait(lock, [this]{ return frame_posted; });
+ }
+ 
+ auto mgw::DisplayClient::Output::recommended_sleep() const -> std::chrono::milliseconds
+@@ -376,6 +374,7 @@ void mgw::DisplayClient::Output::release_current()
+ void mgw::DisplayClient::Output::swap_buffers()
+ {
+     // Avoid throttling compositing by blocking in eglSwapBuffers().
++    // Instead we use the frame "done" notification.
+     eglSwapInterval(owner->egldisplay, 0);
+ 
+     static struct wl_callback_listener const frame_listener =
+@@ -387,13 +386,13 @@ void mgw::DisplayClient::Output::swap_buffers()
+     struct wl_callback *callback = wl_surface_frame(surface);
+     wl_callback_add_listener(callback, &frame_listener, this);
+ 
+-    {
+-        std::lock_guard<decltype(frame_mutex)> lock{frame_mutex};
+-        frame_posted = false;
+-    }
++    std::unique_lock<decltype(frame_mutex)> lock{frame_mutex};
++    frame_posted = false;
+ 
+     if (eglSwapBuffers(owner->egldisplay, eglsurface) != EGL_TRUE)
+         BOOST_THROW_EXCEPTION(egl_error("Failed to perform buffer swap"));
++
++    frame_cv.wait(lock, [this]{ return frame_posted; });
+ }
+ 
+ void mgw::DisplayClient::Output::bind()
+
+From 4d2d8dcabe9fdac523a00bf72687d16e56ce49ac Mon Sep 17 00:00:00 2001
+From: Alan Griffiths <alan@octopull.co.uk>
+Date: Wed, 9 Sep 2020 10:03:51 +0100
+Subject: [PATCH 4/5] Localise the synchronization changes more
+
+---
+ src/platforms/wayland/displayclient.cpp | 60 ++++++++++++++-----------
+ 1 file changed, 34 insertions(+), 26 deletions(-)
+
+diff --git a/src/platforms/wayland/displayclient.cpp b/src/platforms/wayland/displayclient.cpp
+index 3d93f996ce..c985b5596e 100644
+--- a/src/platforms/wayland/displayclient.cpp
++++ b/src/platforms/wayland/displayclient.cpp
+@@ -95,12 +95,6 @@ class mgw::DisplayClient::Output  :
+ 
+     std::function<void(Output const&)> on_done;
+ 
+-    std::mutex frame_mutex;
+-    bool frame_posted = false;
+-    std::condition_variable frame_cv;
+-
+-    void frame_done(struct wl_callback* callback, uint32_t time);
+-
+     // DisplaySyncGroup implementation
+     void for_each_display_buffer(std::function<void(DisplayBuffer&)> const& /*f*/) override;
+     void post() override;
+@@ -320,14 +314,6 @@ void mgw::DisplayClient::Output::for_each_display_buffer(std::function<void(Disp
+     f(*this);
+ }
+ 
+-void mgw::DisplayClient::Output::frame_done(struct wl_callback* callback, uint32_t /*time*/) {
+-    wl_callback_destroy(callback);
+-
+-    std::lock_guard<decltype(frame_mutex)> lock{frame_mutex};
+-    frame_posted = true;
+-    frame_cv.notify_all();
+-}
+-
+ void mgw::DisplayClient::Output::post()
+ {
+ }
+@@ -373,26 +359,48 @@ void mgw::DisplayClient::Output::release_current()
+ 
+ void mgw::DisplayClient::Output::swap_buffers()
+ {
+-    // Avoid throttling compositing by blocking in eglSwapBuffers().
+-    // Instead we use the frame "done" notification.
+-    eglSwapInterval(owner->egldisplay, 0);
++    struct FrameSync
++    {
++        explicit FrameSync(wl_surface* surface)
++        {
++            static struct wl_callback_listener const frame_listener =
++                {
++                    [](void* data, auto... args)
++                        { static_cast<FrameSync*>(data)->frame_done(args...); },
++                };
++
++            struct wl_callback *callback = wl_surface_frame(surface);
++            wl_callback_add_listener(callback, &frame_listener, this);
++        }
+ 
+-    static struct wl_callback_listener const frame_listener =
++        void frame_done(struct wl_callback* callback, uint32_t /*time*/)
+         {
+-            [](void* data, auto... args)
+-                { static_cast<mgw::DisplayClient::Output*>(data)->frame_done(args...); },
+-        };
++            wl_callback_destroy(callback);
++
++            std::lock_guard<decltype(mutex)> lock{mutex};
++            posted = true;
++            cv.notify_all();
++        }
++
++        void wait_for_done()
++        {
++            std::unique_lock<decltype(mutex)> lock{mutex};
++            cv.wait(lock, [this]{ return posted; });
++        }
+ 
+-    struct wl_callback *callback = wl_surface_frame(surface);
+-    wl_callback_add_listener(callback, &frame_listener, this);
++        std::mutex mutex;
++        bool posted = false;
++        std::condition_variable cv;
++    } frame_sync{surface};
+ 
+-    std::unique_lock<decltype(frame_mutex)> lock{frame_mutex};
+-    frame_posted = false;
++    // Avoid throttling compositing by blocking in eglSwapBuffers().
++    // Instead we use the frame "done" notification.
++    eglSwapInterval(owner->egldisplay, 0);
+ 
+     if (eglSwapBuffers(owner->egldisplay, eglsurface) != EGL_TRUE)
+         BOOST_THROW_EXCEPTION(egl_error("Failed to perform buffer swap"));
+ 
+-    frame_cv.wait(lock, [this]{ return frame_posted; });
++    frame_sync.wait_for_done();
+ }
+ 
+ void mgw::DisplayClient::Output::bind()
+
+From 6c28cce01198558d70f173fc064c8c455893fbaf Mon Sep 17 00:00:00 2001
+From: Alan Griffiths <alan@octopull.co.uk>
+Date: Wed, 9 Sep 2020 10:09:32 +0100
+Subject: [PATCH 5/5] Don't leak the frame listener if an exception is thrown
+
+---
+ src/platforms/wayland/displayclient.cpp | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/src/platforms/wayland/displayclient.cpp b/src/platforms/wayland/displayclient.cpp
+index c985b5596e..9f8b895bac 100644
+--- a/src/platforms/wayland/displayclient.cpp
++++ b/src/platforms/wayland/displayclient.cpp
+@@ -361,7 +361,8 @@ void mgw::DisplayClient::Output::swap_buffers()
+ {
+     struct FrameSync
+     {
+-        explicit FrameSync(wl_surface* surface)
++        explicit FrameSync(wl_surface* surface) :
++            callback{wl_surface_frame(surface)}
+         {
+             static struct wl_callback_listener const frame_listener =
+                 {
+@@ -369,14 +370,16 @@ void mgw::DisplayClient::Output::swap_buffers()
+                         { static_cast<FrameSync*>(data)->frame_done(args...); },
+                 };
+ 
+-            struct wl_callback *callback = wl_surface_frame(surface);
+             wl_callback_add_listener(callback, &frame_listener, this);
+         }
+ 
+-        void frame_done(struct wl_callback* callback, uint32_t /*time*/)
++        ~FrameSync()
+         {
+             wl_callback_destroy(callback);
++        }
+ 
++        void frame_done(wl_callback*, uint32_t)
++        {
+             std::lock_guard<decltype(mutex)> lock{mutex};
+             posted = true;
+             cv.notify_all();
+@@ -391,6 +394,8 @@ void mgw::DisplayClient::Output::swap_buffers()
+         std::mutex mutex;
+         bool posted = false;
+         std::condition_variable cv;
++
++        wl_callback* const callback;
+     } frame_sync{surface};
+ 
+     // Avoid throttling compositing by blocking in eglSwapBuffers().

@@ -1,0 +1,68 @@
+From 0d48f25e8049d4ff8478dca15ae624d911e6d7fa Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Tue, 21 May 2024 16:45:49 +0200
+Subject: [PATCH] Make yagears more similar to glxtest
+
+---
+ main.c | 31 ++++++++++++++++++-------------
+ 1 file changed, 18 insertions(+), 13 deletions(-)
+
+diff --git a/main.c b/main.c
+index a72955b..64eb7e8 100644
+--- a/main.c
++++ b/main.c
+@@ -1964,17 +1964,6 @@ int main(int argc, char *argv[])
+   #endif
+ 
+   #if defined(EGL_X11)
+-  if (!strcmp(backend, "egl-x11")) {
+-    #if defined(EGL_EXT_platform_base) && defined(EGL_PLATFORM_X11_EXT)
+-    if (eglCreatePlatformWindowSurfaceEXT) {
+-      egl_win = eglCreatePlatformWindowSurfaceEXT(egl_dpy, egl_config, &x11_win, NULL);
+-    }
+-    else
+-    #endif
+-    {
+-      egl_win = eglCreateWindowSurface(egl_dpy, egl_config, (EGLNativeWindowType)x11_win, NULL);
+-    }
+-  }
+   #endif
+   #if defined(EGL_DIRECTFB)
+   if (!strcmp(backend, "egl-directfb")) {
+@@ -2047,8 +2036,8 @@ int main(int argc, char *argv[])
+     egl_win = eglCreateWindowSurface(egl_dpy, egl_config, (EGLNativeWindowType)rpi_win, NULL);
+   }
+   #endif
+-  #if defined(EGL_X11) || defined(EGL_DIRECTFB) || defined(EGL_FBDEV) || defined(EGL_WAYLAND) || defined(EGL_XCB) || defined(EGL_DRM) || defined(EGL_RPI)
+-  if (!strcmp(backend, "egl-x11") || !strcmp(backend, "egl-directfb") || !strcmp(backend, "egl-fbdev") || !strcmp(backend, "egl-wayland") || !strcmp(backend, "egl-xcb") || !strcmp(backend, "egl-drm") || !strcmp(backend, "egl-rpi")) {
++  #if defined(EGL_DIRECTFB) || defined(EGL_FBDEV) || defined(EGL_WAYLAND) || defined(EGL_XCB) || defined(EGL_DRM) || defined(EGL_RPI)
++  if (!strcmp(backend, "egl-directfb") || !strcmp(backend, "egl-fbdev") || !strcmp(backend, "egl-wayland") || !strcmp(backend, "egl-xcb") || !strcmp(backend, "egl-drm") || !strcmp(backend, "egl-rpi")) {
+     if (!egl_win) {
+       printf("eglCreateWindowSurface failed: 0x%x\n", eglGetError());
+       goto out;
+@@ -2143,6 +2132,22 @@ int main(int argc, char *argv[])
+       goto out;
+     }
+ 
++    if (!strcmp(backend, "egl-x11")) {
++      #if defined(EGL_EXT_platform_base) && defined(EGL_PLATFORM_X11_EXT)
++      if (eglCreatePlatformWindowSurfaceEXT) {
++        egl_win = eglCreatePlatformWindowSurfaceEXT(egl_dpy, egl_config, &x11_win, NULL);
++      }
++      else
++      #endif
++      {
++        egl_win = eglCreateWindowSurface(egl_dpy, egl_config, (EGLNativeWindowType)x11_win, NULL);
++      }
++      if (!egl_win) {
++        printf("eglCreateWindowSurface failed: 0x%x\n", eglGetError());
++        goto out;
++      }
++    }
++
+     err = eglMakeCurrent(egl_dpy, egl_win, egl_win, egl_ctx);
+     if (!err) {
+       printf("eglMakeCurrent failed: 0x%x\n", eglGetError());
+-- 
+2.44.0
+

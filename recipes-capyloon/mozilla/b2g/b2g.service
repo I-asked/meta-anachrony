@@ -6,7 +6,7 @@ Wants=api-daemon.service
 
 [Service]
 Type=simple
-Environment=LD_LIBRARY_PATH=/opt/b2g DISPLAY=:0
+Environment=LD_LIBRARY_PATH=/opt/b2g DISPLAY=:0 HYBRIS_EGLPLATFORM=x11 MOZ_WEBGL_FORCE_EGL=1
 ExecStart=/opt/b2g/b2g -profile %h/.b2g/profile -kiosk
 Restart=always
 

@@ -6,6 +6,22 @@ SRC_URI += "https://github.com/MirServer/mir/releases/download/v${PV}/mir-${PV}.
             file://0001-Fix-cross-build.patch \
             file://0002-Merge-1462.patch \
             file://0003-Respect-motif-decoration-hint.patch \
+            file://ubports/0001-Don-t-print-flout-due-to-bug-in-libhybris-that-make-.patch \
+            file://ubports/0002-Nested-patchwork-Use-eglImage-for-software-buffers.patch \
+            file://ubports/0003-Use-drmModeGetResources-as-fallback-for-modeset-prob.patch \
+            file://ubports/0004-Increase-max-amount-of-data-ints-in-MirBufferPackage.patch \
+            file://ubports/0005-Add-10bpp-2bpp-alpha-RGBA-pixel-format-to-MirPixelFo.patch \
+            file://ubports/0006-NO-MERGE-Add-envar-to-enable-mirs-own-window-decor.patch \
+            file://ubports/0007-DO-NOT-MERGE-Temp-fix-for-wrongly-scaled-buffers.patch \
+            file://ubports/0008-wayland-platform-Allow-apply_to-to-set-scale-and-for.patch \
+            file://ubports/0009-Revert-Merge-1366.patch \
+            file://ubports/0010-Wayland-platform-Compositing-shouldn-t-block.patch \
+            file://ubports/0011-Enable-nested-platform-BufferAllocator-to-pass-Wayla.patch \
+            file://ubports/0012-nested-make-shared-EGL-context-in-EGLDisplayHandle-c.patch \
+            file://ubports/0013-fix-build-on-gcc11.patch \
+            file://ubports/0014-Filter-out-some-confusing-libinput-events.patch \
+            file://ubports/0015-mesa-Change-scanout-buffer-candidate-calculation.patch \
+            file://ubports/0016-miral-add-dsi-output.patch \
            "
 
 LIC_FILES_CHKSUM = "\

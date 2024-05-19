@@ -1,0 +1,38 @@
+From 34f4b73ee7b8e681b0771a51a895172827d60675 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Mon, 20 May 2024 21:40:26 +0200
+Subject: [PATCH 10/10] Make eglGetProcAddress dlsym before slave dispatch
+
+---
+ hybris/egl/egl.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/hybris/egl/egl.c b/hybris/egl/egl.c
+index 22a9821..da0543e 100644
+--- a/hybris/egl/egl.c
++++ b/hybris/egl/egl.c
+@@ -218,6 +218,10 @@ EGLDisplay __eglHybrisGetPlatformDisplayCommon(EGLenum platform,
+ 			hybris_ws = "null";
+ 			break;
+ 
++		case EGL_PLATFORM_X11_KHR:
++			hybris_ws = "x11";
++			break;
++
+ #ifdef WANT_WAYLAND
+ 		case EGL_PLATFORM_WAYLAND_KHR:
+ 			hybris_ws = "wayland";
+@@ -615,6 +619,10 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *procname)
+ 		ret = ws_eglGetProcAddress(procname);
+ 	}
+ 
++	if (ret == NULL) {
++		HYBRIS_DLSYSM(egl, &ret, procname);
++	}
++
+ 	if (ret == NULL && _eglGetProcAddress != NULL) {
+ 		ret = (*_eglGetProcAddress)(procname);
+ 	}
+-- 
+2.44.0
+

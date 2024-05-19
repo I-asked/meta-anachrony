@@ -1,0 +1,94 @@
+From a7a58b2087a672a3c1d6d8e528fafa965c217378 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Mon, 20 May 2024 10:34:16 +0200
+Subject: [PATCH 09/10] Add missing includes to the X11 EGL platform
+
+---
+ hybris/egl/egl.c                        | 1 +
+ hybris/egl/platforms/x11/Makefile.am    | 2 ++
+ hybris/egl/platforms/x11/x11_window.cpp | 2 +-
+ hybris/egl/platforms/x11/x11_window.h   | 5 +++--
+ hybris/egl/ws.c                         | 2 +-
+ 5 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/hybris/egl/egl.c b/hybris/egl/egl.c
+index d8118a8..22a9821 100644
+--- a/hybris/egl/egl.c
++++ b/hybris/egl/egl.c
+@@ -290,6 +290,7 @@ const char * eglQueryString(EGLDisplay dpy, EGLint name)
+ 
+ HYBRIS_IMPLEMENT_FUNCTION4(egl, EGLBoolean, eglGetConfigs, EGLDisplay, EGLConfig *, EGLint, EGLint *);
+ HYBRIS_IMPLEMENT_FUNCTION5(egl, EGLBoolean, eglChooseConfig, EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *);
++HYBRIS_IMPLEMENT_FUNCTION4(egl, EGLBoolean, eglGetConfigAttrib, EGLDisplay, EGLConfig, EGLint, EGLint *);
+ 
+ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
+ 		EGLNativeWindowType win,
+diff --git a/hybris/egl/platforms/x11/Makefile.am b/hybris/egl/platforms/x11/Makefile.am
+index 22eac5e..1ba93e2 100644
+--- a/hybris/egl/platforms/x11/Makefile.am
++++ b/hybris/egl/platforms/x11/Makefile.am
+@@ -3,9 +3,11 @@ pkglib_LTLIBRARIES = eglplatform_x11.la
+ eglplatform_x11_la_SOURCES = eglplatform_x11.cpp x11_window.cpp xcb_drihybris.c
+ eglplatform_x11_la_CXXFLAGS = \
+ 	-I$(top_srcdir)/common \
++	-I$(top_srcdir)/platforms/common \
+ 	-I$(top_srcdir)/include \
+ 	-I$(top_srcdir)/egl \
+ 	-I$(top_srcdir)/egl/platforms/common \
++	-I$(top_builddir)/egl/platforms/common \
+ 	$(ANDROID_HEADERS_CFLAGS) \
+ 	$(WAYLAND_CLIENT_CFLAGS)
+ 
+diff --git a/hybris/egl/platforms/x11/x11_window.cpp b/hybris/egl/platforms/x11/x11_window.cpp
+index 087f3c5..7c6201c 100644
+--- a/hybris/egl/platforms/x11/x11_window.cpp
++++ b/hybris/egl/platforms/x11/x11_window.cpp
+@@ -588,7 +588,7 @@ int X11NativeWindow::setBuffersDimensions(int width, int height) {
+     return NO_ERROR;
+ }
+ 
+-int X11NativeWindow::setUsage(int usage) {
++int X11NativeWindow::setUsage(uint64_t usage) {
+ //     if ((usage | GRALLOC_USAGE_HW_TEXTURE) != m_usage)
+ //     {
+ //         TRACE("old-usage:x%x new-usage:x%x", m_usage, usage);
+diff --git a/hybris/egl/platforms/x11/x11_window.h b/hybris/egl/platforms/x11/x11_window.h
+index 6eb6df9..ceb6675 100644
+--- a/hybris/egl/platforms/x11/x11_window.h
++++ b/hybris/egl/platforms/x11/x11_window.h
+@@ -26,8 +26,9 @@
+ 
+ #ifndef X11_WINDOW_H
+ #define X11_WINDOW_H
+-#include "nativewindowbase.h"
++#include "eglnativewindowbase.h"
+ #include <linux/fb.h>
++#include <hardware/gralloc.h>
+ #include <hybris/gralloc/gralloc.h>
+ 
+ extern "C" {
+@@ -144,7 +145,7 @@ protected:
+     virtual unsigned int transformHint() const;
+     virtual unsigned int getUsage() const;
+     // perform calls
+-    virtual int setUsage(int usage);
++    virtual int setUsage(uint64_t usage);
+     virtual int setBuffersFormat(int format);
+     virtual int setBuffersDimensions(int width, int height);
+     virtual int setBufferCount(int cnt);
+diff --git a/hybris/egl/ws.c b/hybris/egl/ws.c
+index 706b1d3..44e540d 100644
+--- a/hybris/egl/ws.c
++++ b/hybris/egl/ws.c
+@@ -162,7 +162,7 @@ void ws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval
+ 
+ EGLBoolean ws_eglGetConfigAttrib(struct _EGLDisplay *display, EGLConfig config, EGLint attribute, EGLint *value)
+ {
+-	_init_ws();
++	assert(ws != NULL);
+ 	if (ws->eglGetConfigAttrib)
+ 		return ws->eglGetConfigAttrib(display, config, attribute, value);
+     else
+-- 
+2.44.0
+

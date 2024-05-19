@@ -1,0 +1,78 @@
+From 0f4011dd30538b3ceca0dbbb4d21e887d3d779a8 Mon Sep 17 00:00:00 2001
+From: Marius Gripsgard <marius@ubports.com>
+Date: Tue, 20 Nov 2018 23:44:19 +0100
+Subject: Don't print flout due to bug in libhybris that make us segfault when
+ printing floats
+
+https://github.com/libhybris/libhybris/issues/350
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ .../logging/display_configuration_report.cpp  | 23 +++++++------------
+ 1 file changed, 8 insertions(+), 15 deletions(-)
+
+diff --git a/src/server/report/logging/display_configuration_report.cpp b/src/server/report/logging/display_configuration_report.cpp
+index 0bb1d1fd79..85be1debb7 100644
+--- a/src/server/report/logging/display_configuration_report.cpp
++++ b/src/server/report/logging/display_configuration_report.cpp
+@@ -127,12 +127,12 @@ void mrl::DisplayConfigurationReport::log_configuration(
+ 
+             int width_mm = out.physical_size_mm.width.as_int();
+             int height_mm = out.physical_size_mm.height.as_int();
+-            float inches =
+-                sqrtf(width_mm * width_mm + height_mm * height_mm) / 25.4;
++            //float inches =
++            //    sqrtf(width_mm * width_mm + height_mm * height_mm) / 25.4;
+ 
+             logger->log(component, severity,
+-                        "%sPhysical size %.1f\" %dx%dmm",
+-                        indent, inches, width_mm, height_mm);
++                        "%sPhysical size %dx%dmm",
++                        indent, width_mm, height_mm);
+ 
+             static const char* const power_mode[] =
+                 {"on", "in standby", "suspended", "off"};
+@@ -145,22 +145,20 @@ void mrl::DisplayConfigurationReport::log_configuration(
+                 {
+                     auto const& mode = out.modes[out.current_mode_index];
+                     logger->log(component, severity,
+-                                "%sCurrent mode %dx%d %.2fHz",
++                                "%sCurrent mode %dx%d",
+                                 indent,
+                                 mode.size.width.as_int(),
+-                                mode.size.height.as_int(),
+-                                mode.vrefresh_hz);
++                                mode.size.height.as_int());
+                 }
+ 
+                 if (out.preferred_mode_index < out.modes.size())
+                 {
+                     auto const& mode = out.modes[out.preferred_mode_index];
+                     logger->log(component, severity,
+-                                "%sPreferred mode %dx%d %.2fHz",
++                                "%sPreferred mode %dx%d",
+                                 indent,
+                                 mode.size.width.as_int(),
+-                                mode.size.height.as_int(),
+-                                mode.vrefresh_hz);
++                                mode.size.height.as_int());
+                 }
+ 
+                 static const char* const orientation[] =
+@@ -182,11 +180,6 @@ void mrl::DisplayConfigurationReport::log_configuration(
+                             indent,
+                             out.top_left.x.as_int(),
+                             out.top_left.y.as_int());
+-
+-                logger->log(component, severity,
+-                            "%sScaling factor: %.2f",
+-                            indent,
+-                            out.scale);
+             }
+         }
+     });
+-- 
+2.25.1
+

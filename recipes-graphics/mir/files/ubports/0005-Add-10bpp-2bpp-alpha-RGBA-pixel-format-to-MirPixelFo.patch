@@ -1,0 +1,27 @@
+From fd59673422fcb9646d4088fd24c71b85d5434cb5 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Sun, 24 Jan 2021 13:01:11 +0200
+Subject: Add 10bpp + 2bpp alpha RGBA pixel format to MirPixelFormat enum
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ include/core/mir_toolkit/common.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/core/mir_toolkit/common.h b/include/core/mir_toolkit/common.h
+index 0e40492a2e..697de2f7f7 100644
+--- a/include/core/mir_toolkit/common.h
++++ b/include/core/mir_toolkit/common.h
+@@ -253,6 +253,7 @@ typedef enum MirPixelFormat
+     mir_pixel_format_rgb_565 = 7,
+     mir_pixel_format_rgba_5551 = 8,
+     mir_pixel_format_rgba_4444 = 9,
++    mir_pixel_format_rgba_10101002 = 10,
+     /*
+      * TODO: Big endian support would require additional formats in order to
+      *       composite software surfaces using OpenGL (GL_RGBA/GL_BGRA_EXT):
+-- 
+2.25.1
+

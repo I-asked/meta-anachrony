@@ -2,7 +2,7 @@ SUMMARY = "custom DRI3-based Xorg extension, which allows sharing Android grallo
 
 HOMEPAGE = "https://gitlab.com/ubports/development/core/hybris-support/drihybris"
 LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://LICENSE;md5=09f012d5887ae0e2db5d865786502008"
+LIC_FILES_CHKSUM = "file://COPYING;md5=09f012d5887ae0e2db5d865786502008"
 
 SRC_URI += "git://gitlab.com/ubports/development/core/hybris-support/drihybris.git;protocol=https;branch=main"
 

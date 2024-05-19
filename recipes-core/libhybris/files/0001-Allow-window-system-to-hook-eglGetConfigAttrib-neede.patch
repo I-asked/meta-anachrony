@@ -1,0 +1,64 @@
+From 8555a4f7ef157f2d345bf3269751424e88882c16 Mon Sep 17 00:00:00 2001
+From: NeKit <nekit1000@gmail.com>
+Date: Wed, 18 Oct 2017 23:12:51 +0300
+Subject: [PATCH 01/10] Allow window system to hook eglGetConfigAttrib (needed
+ for X11 EGL_NATIVE_VISUAL_ID)
+
+---
+ hybris/egl/egl.c | 1 -
+ hybris/egl/ws.c  | 9 +++++++++
+ hybris/egl/ws.h  | 2 ++
+ 3 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/hybris/egl/egl.c b/hybris/egl/egl.c
+index 22a9821..d8118a8 100644
+--- a/hybris/egl/egl.c
++++ b/hybris/egl/egl.c
+@@ -290,7 +290,6 @@ const char * eglQueryString(EGLDisplay dpy, EGLint name)
+ 
+ HYBRIS_IMPLEMENT_FUNCTION4(egl, EGLBoolean, eglGetConfigs, EGLDisplay, EGLConfig *, EGLint, EGLint *);
+ HYBRIS_IMPLEMENT_FUNCTION5(egl, EGLBoolean, eglChooseConfig, EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *);
+-HYBRIS_IMPLEMENT_FUNCTION4(egl, EGLBoolean, eglGetConfigAttrib, EGLDisplay, EGLConfig, EGLint, EGLint *);
+ 
+ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
+ 		EGLNativeWindowType win,
+diff --git a/hybris/egl/ws.c b/hybris/egl/ws.c
+index 4800890..706b1d3 100644
+--- a/hybris/egl/ws.c
++++ b/hybris/egl/ws.c
+@@ -160,4 +160,13 @@ void ws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval
+ 		ws->setSwapInterval(dpy, win, interval);
+ }
+ 
++EGLBoolean ws_eglGetConfigAttrib(struct _EGLDisplay *display, EGLConfig config, EGLint attribute, EGLint *value)
++{
++	_init_ws();
++	if (ws->eglGetConfigAttrib)
++		return ws->eglGetConfigAttrib(display, config, attribute, value);
++    else
++        return EGL_FALSE;
++}
++
+ // vim:ts=4:sw=4:noexpandtab
+diff --git a/hybris/egl/ws.h b/hybris/egl/ws.h
+index 5f49999..36eda00 100644
+--- a/hybris/egl/ws.h
++++ b/hybris/egl/ws.h
+@@ -54,6 +54,7 @@ struct ws_module {
+ 	void (*prepareSwap)(EGLDisplay dpy, EGLNativeWindowType win, EGLint *damage_rects, EGLint damage_n_rects);
+ 	void (*finishSwap)(EGLDisplay dpy, EGLNativeWindowType win);
+ 	void (*setSwapInterval)(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval);
++    EGLBoolean (*eglGetConfigAttrib)(struct _EGLDisplay *display, EGLConfig config, EGLint attribute, EGLint *value);
+ };
+ 
+ EGLBoolean ws_init(const char * egl_platform);
+@@ -68,5 +69,6 @@ const char *ws_eglQueryString(EGLDisplay dpy, EGLint name, const char *(*real_eg
+ void ws_prepareSwap(EGLDisplay dpy, EGLNativeWindowType win, EGLint *damage_rects, EGLint damage_n_rects);
+ void ws_finishSwap(EGLDisplay dpy, EGLNativeWindowType win);
+ void ws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval);
++EGLBoolean ws_eglGetConfigAttrib(struct _EGLDisplay *display, EGLConfig config, EGLint attribute, EGLint *value);
+ 
+ #endif
+-- 
+2.44.0
+

@@ -30,7 +30,7 @@ export CXXSTDLIB = "c++"
 
 export CROSS_COMPILE = "1"
 export MOZCONFIG = "${B}/my-mozconfig"
-export MOZ_OBJDIR = "${S}/gecko-build-dir"
+export MOZ_OBJDIR = "${B}/gecko-build-dir"
 
 export BUILD_LDFLAGS += " -fuse-ld=lld "
 export BUILD_CFLAGS += " -fuse-ld=lld "

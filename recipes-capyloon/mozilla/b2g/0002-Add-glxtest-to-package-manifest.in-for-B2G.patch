@@ -1,0 +1,24 @@
+From 626195311e820f326989144f8ff7173d0942c256 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Sun, 19 May 2024 20:34:36 +0200
+Subject: [PATCH 2/3] Add glxtest to package-manifest.in for B2G
+
+---
+ b2g/installer/package-manifest.in | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/b2g/installer/package-manifest.in b/b2g/installer/package-manifest.in
+index 7cf7399085ae..e4004acb204c 100644
+--- a/b2g/installer/package-manifest.in
++++ b/b2g/installer/package-manifest.in
+@@ -118,6 +118,7 @@
+ @RESPATH@/models/
+ #endif
+ #ifdef MOZ_GTK
++@BINPATH@/glxtest
+ @RESPATH@/chrome/icons/default/default16.png
+ @RESPATH@/chrome/icons/default/default32.png
+ @RESPATH@/chrome/icons/default/default48.png
+-- 
+2.44.0
+

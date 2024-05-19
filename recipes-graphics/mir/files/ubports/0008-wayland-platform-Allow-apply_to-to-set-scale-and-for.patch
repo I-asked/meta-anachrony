@@ -1,0 +1,129 @@
+From d67e81786a879467e9eaa848dc60ca3a73fe7a65 Mon Sep 17 00:00:00 2001
+From: Marius Gripsgard <marius@ubports.com>
+Date: Mon, 9 Dec 2019 17:54:18 +0100
+Subject: [wayland-platform] Allow apply_to to set scale and formfactor
+
+This is a hack that allows apply_to to set scale and formfactor, as
+these are internal to mir, it should not cause conflicting configs
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/platforms/wayland/display.cpp       | 17 ++++++++++++++++-
+ src/platforms/wayland/display.h         |  5 ++++-
+ src/platforms/wayland/displayclient.cpp |  9 +++++++++
+ src/platforms/wayland/displayclient.h   |  1 +
+ src/platforms/wayland/platform.cpp      |  4 ++--
+ 5 files changed, 32 insertions(+), 4 deletions(-)
+
+diff --git a/src/platforms/wayland/display.cpp b/src/platforms/wayland/display.cpp
+index 57edd0da5e..a007be45bf 100644
+--- a/src/platforms/wayland/display.cpp
++++ b/src/platforms/wayland/display.cpp
+@@ -84,7 +84,8 @@ mgw::Display* the_display = nullptr;
+ mgw::Display::Display(
+     wl_display* const wl_display,
+     std::shared_ptr<GLConfig> const& gl_config,
+-    std::shared_ptr<DisplayReport> const& report) :
++    std::shared_ptr<DisplayReport> const& report,
++    std::shared_ptr<DisplayConfigurationPolicy> const& initial_conf_policy) :
+     DisplayClient{wl_display, gl_config},
+     report{report},
+     shutdown_signal{::eventfd(0, EFD_CLOEXEC)},
+@@ -96,6 +97,20 @@ mgw::Display::Display(
+ 
+     std::lock_guard<decltype(the_display_mtx)> lock{the_display_mtx};
+     the_display = this;
++
++    auto conf = configuration();
++    initial_conf_policy->apply_to(*conf.get());
++
++    DisplayClient::for_each_output(
++        [&](DisplayConfigurationOutput &output) {
++            conf->for_each_output(
++                [&](UserDisplayConfigurationOutput &newconf) {
++                    if (output.id == newconf.id) {
++                        output.scale = newconf.scale;
++                        output.form_factor = newconf.form_factor;
++                    }
++                });
++        });
+ }
+ 
+ auto mgw::Display::configuration() const -> std::unique_ptr<DisplayConfiguration>
+diff --git a/src/platforms/wayland/display.h b/src/platforms/wayland/display.h
+index 0fd9f08c53..23e3c2f006 100644
+--- a/src/platforms/wayland/display.h
++++ b/src/platforms/wayland/display.h
+@@ -25,6 +25,8 @@
+ #include <mir/graphics/display.h>
+ #include <mir/graphics/display_report.h>
+ #include <mir/renderer/gl/context_source.h>
++#include <mir/graphics/display_configuration.h>
++#include "mir/graphics/display_configuration_policy.h"
+ 
+ #include <xkbcommon/xkbcommon.h>
+ 
+@@ -59,7 +61,8 @@ public:
+     Display(
+         wl_display* const wl_display,
+         std::shared_ptr<GLConfig> const& gl_config,
+-        std::shared_ptr<DisplayReport> const& report);
++        std::shared_ptr<DisplayReport> const& report,
++	std::shared_ptr<DisplayConfigurationPolicy> const& initial_conf_policy);
+ 
+     ~Display();
+ 
+diff --git a/src/platforms/wayland/displayclient.cpp b/src/platforms/wayland/displayclient.cpp
+index 76e9aa84cb..13f0c31da3 100644
+--- a/src/platforms/wayland/displayclient.cpp
++++ b/src/platforms/wayland/displayclient.cpp
+@@ -831,6 +831,15 @@ void mgw::DisplayClient::for_each_display_sync_group(const std::function<void(Di
+     }
+ }
+ 
++void mgw::DisplayClient::for_each_output(std::function<void(DisplayConfigurationOutput&)> f)
++{
++    std::lock_guard<decltype(outputs_mutex)> lock{outputs_mutex};
++    for (auto& output : bound_outputs)
++    {
++        f(output.second->dcout);
++    }
++}
++
+ mgw::WaylandDisplayConfiguration::WaylandDisplayConfiguration(std::vector<DisplayConfigurationOutput> && outputs) :
+     outputs{outputs}
+ {
+diff --git a/src/platforms/wayland/displayclient.h b/src/platforms/wayland/displayclient.h
+index b28f7f8040..ae0272131b 100644
+--- a/src/platforms/wayland/displayclient.h
++++ b/src/platforms/wayland/displayclient.h
+@@ -59,6 +59,7 @@ protected:
+ 
+     auto display_configuration() const -> std::unique_ptr<DisplayConfiguration>;
+     void for_each_display_sync_group(const std::function<void(DisplaySyncGroup&)>& f);
++    void for_each_output(std::function<void(DisplayConfigurationOutput&)> f);
+ 
+     virtual void keyboard_keymap(wl_keyboard* keyboard, uint32_t format, int32_t fd, uint32_t size);
+     virtual void keyboard_enter(wl_keyboard* keyboard, uint32_t serial, wl_surface* surface, wl_array* keys);
+diff --git a/src/platforms/wayland/platform.cpp b/src/platforms/wayland/platform.cpp
+index c7cd62316d..3cc967a3d7 100644
+--- a/src/platforms/wayland/platform.cpp
++++ b/src/platforms/wayland/platform.cpp
+@@ -46,10 +46,10 @@ mgw::Platform::Platform(struct wl_display* const wl_display, std::shared_ptr<mg:
+ }
+ 
+ mir::UniqueModulePtr<mg::Display> mgw::Platform::create_display(
+-    std::shared_ptr<DisplayConfigurationPolicy> const&,
++    std::shared_ptr<DisplayConfigurationPolicy> const& initial_conf_policy,
+     std::shared_ptr<GLConfig> const& gl_config)
+ {
+-  return mir::make_module_ptr<mgw::Display>(wl_display, gl_config, report);
++  return mir::make_module_ptr<mgw::Display>(wl_display, gl_config, report, initial_conf_policy);
+ }
+ 
+ mg::NativeDisplayPlatform* mgw::Platform::native_display_platform()
+-- 
+2.25.1
+

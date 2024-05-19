@@ -1,0 +1,26 @@
+From 208080cb646e1075b768e2d8921dcacb0d201b3d Mon Sep 17 00:00:00 2001
+From: NeKit <nekit1000@gmail.com>
+Date: Fri, 22 Feb 2019 23:23:10 +0100
+Subject: [PATCH 8/9] eglplatformcommon: add RGB888 case to
+ hybris_dump_buffer_to_file
+
+---
+ hybris/egl/platforms/common/eglplatformcommon.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/hybris/egl/platforms/common/eglplatformcommon.cpp b/hybris/egl/platforms/common/eglplatformcommon.cpp
+index ec3b2e8..4030312 100644
+--- a/hybris/egl/platforms/common/eglplatformcommon.cpp
++++ b/hybris/egl/platforms/common/eglplatformcommon.cpp
+@@ -57,6 +57,8 @@ extern "C" void hybris_dump_buffer_to_file(ANativeWindowBuffer *buf)
+ 
+ 	if (buf->format == HAL_PIXEL_FORMAT_RGBA_8888 || buf->format == HAL_PIXEL_FORMAT_BGRA_8888)
+ 		bytes_pp = 4;
++    else if (buf->format == HAL_PIXEL_FORMAT_RGB_888)
++        bytes_pp = 3;
+ 	else if (buf->format == HAL_PIXEL_FORMAT_RGB_565)
+ 		bytes_pp = 2;
+ 
+-- 
+2.44.0
+

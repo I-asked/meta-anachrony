@@ -1,0 +1,50 @@
+From 1e933466e4b93b2740ee8b0fd8b320ace45fb425 Mon Sep 17 00:00:00 2001
+From: Alfred Neumayer <dev.beidl@gmail.com>
+Date: Sun, 25 Jul 2021 01:06:28 +0200
+Subject: [PATCH] mesa: Change scanout buffer candidate calculation
+
+Whether a buffer is supposed to use scanout capabilities
+in the driver is determined by it's buffer size.
+The Lima driver requires scanout buffers to display anything
+in Mirclient, and since the the screen size is 720x1440
+it always fails this check, leaving the user with no visible buffers.
+
+Change the calculation to actually take into account the number
+of pixels on the screen instead.
+
+This enables Mirclient, nesting & bypassing on the PinePhone.
+---
+ src/platforms/mesa/client/client_platform.cpp  | 2 +-
+ src/platforms/mesa/server/buffer_allocator.cpp | 3 +--
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/src/platforms/mesa/client/client_platform.cpp b/src/platforms/mesa/client/client_platform.cpp
+index d34abef..2bdaa17 100644
+--- a/src/platforms/mesa/client/client_platform.cpp
++++ b/src/platforms/mesa/client/client_platform.cpp
+@@ -461,7 +461,7 @@ uint32_t mclm::ClientPlatform::native_flags_for(MirBufferUsage, mir::geometry::S
+ #pragma GCC diagnostic pop
+ 
+     uint32_t bo_flags{GBM_BO_USE_RENDERING};
+-    if (size.width.as_uint32_t() >= 800 && size.height.as_uint32_t() >= 600)
++    if (size.width.as_uint32_t() >= 600 && size.height.as_uint32_t() >= 600)
+         bo_flags |= GBM_BO_USE_SCANOUT;
+     return bo_flags;
+ }
+diff --git a/src/platforms/mesa/server/buffer_allocator.cpp b/src/platforms/mesa/server/buffer_allocator.cpp
+index c687cee..c6cc9bd 100644
+--- a/src/platforms/mesa/server/buffer_allocator.cpp
++++ b/src/platforms/mesa/server/buffer_allocator.cpp
+@@ -291,8 +291,7 @@ std::shared_ptr<mg::Buffer> mgm::BufferAllocator::alloc_hardware_buffer(
+      *       mir_surface_state_fullscreen later when it's fully wired up.
+      */
+     if ((bypass_option == mgm::BypassOption::allowed) &&
+-         buffer_properties.size.width.as_uint32_t() >= 800 &&
+-         buffer_properties.size.height.as_uint32_t() >= 600)
++         buffer_properties.size.width.as_uint32_t() >= 600 && buffer_properties.size.height.as_uint32_t() >= 600)
+     {
+         bo_flags |= GBM_BO_USE_SCANOUT;
+     }
+-- 
+2.30.1 (Apple Git-130)
+

@@ -1,0 +1,33 @@
+From 59a2fe605d879042c03fd9eb37f5376fa072a16a Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Thu, 27 May 2021 19:12:21 +0300
+Subject: [nested] make shared EGL context in
+ EGLDisplayHandle::create_gl_context()
+
+This matches what Display::create_gl_context() does in mir-android-platform
+and allows WaylandTexBuffer to work as it depends on allocating/binding
+texture IDs, which must be shared with rendering context.
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/server/graphics/nested/display.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/server/graphics/nested/display.cpp b/src/server/graphics/nested/display.cpp
+index a6784f3b92..9c5f9e434f 100644
+--- a/src/server/graphics/nested/display.cpp
++++ b/src/server/graphics/nested/display.cpp
+@@ -139,7 +139,7 @@ std::unique_ptr<mir::renderer::gl::Context> mgn::detail::EGLDisplayHandle::creat
+        EGL_RENDERABLE_TYPE, MIR_SERVER_EGL_OPENGL_BIT,
+        EGL_NONE
+     };
+-    return std::make_unique<SurfacelessEGLContext>(egl_display, attribs, EGL_NO_CONTEXT);
++    return std::make_unique<SurfacelessEGLContext>(egl_display, attribs, egl_context_);
+ }
+ 
+ mgn::detail::EGLDisplayHandle::~EGLDisplayHandle() noexcept
+-- 
+2.25.1
+

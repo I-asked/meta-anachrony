@@ -1,0 +1,201 @@
+From 2dcff5eda2de2b5cc25d1a86f22973d8aa229d82 Mon Sep 17 00:00:00 2001
+From: Julia Nelz <121945980+I-asked@users.noreply.github.com>
+Date: Sun, 19 May 2024 23:03:51 +0200
+Subject: [PATCH 3/3] Relax glxtest
+
+---
+ toolkit/xre/glxtest/glxtest.cpp | 74 +++++++++++++++++++--------------
+ 1 file changed, 43 insertions(+), 31 deletions(-)
+
+diff --git a/toolkit/xre/glxtest/glxtest.cpp b/toolkit/xre/glxtest/glxtest.cpp
+index 077bf2a396c4..93845a294c69 100644
+--- a/toolkit/xre/glxtest/glxtest.cpp
++++ b/toolkit/xre/glxtest/glxtest.cpp
+@@ -110,12 +110,16 @@ typedef void* (*PFNEGLGETPROCADDRESS)(const char*);
+ #define EGL_NO_SURFACE nullptr
+ #define EGL_FALSE 0
+ #define EGL_TRUE 1
++#define EGL_OPENGL_ES_BIT 0x0001
+ #define EGL_OPENGL_ES2_BIT 0x0004
++#define EGL_ALPHA_SIZE 0x3021
+ #define EGL_BLUE_SIZE 0x3022
+ #define EGL_GREEN_SIZE 0x3023
+ #define EGL_RED_SIZE 0x3024
++#define EGL_DEPTH_SIZE 0x3025
+ #define EGL_NONE 0x3038
+ #define EGL_RENDERABLE_TYPE 0x3040
++#define EGL_CONFORMANT 0x3042
+ #define EGL_VENDOR 0x3053
+ #define EGL_EXTENSIONS 0x3055
+ #define EGL_CONTEXT_MAJOR_VERSION 0x3098
+@@ -387,32 +391,44 @@ static bool get_render_name(const char* name) {
+ }
+ 
+ static bool get_egl_gl_status(EGLDisplay dpy,
+-                              PFNEGLGETPROCADDRESS eglGetProcAddress) {
++                              void *libegl) {
++  PFNEGLGETPROCADDRESS eglGetProcAddress =
++      cast<PFNEGLGETPROCADDRESS>(dlsym(libegl, "eglGetProcAddress"));
++
++  if (!eglGetProcAddress) {
++    record_warning("no eglGetProcAddress");
++    return false;
++  }
++
+   typedef EGLBoolean (*PFNEGLCHOOSECONFIGPROC)(
+       EGLDisplay dpy, EGLint const* attrib_list, EGLConfig* configs,
+       EGLint config_size, EGLint* num_config);
+   PFNEGLCHOOSECONFIGPROC eglChooseConfig =
+-      cast<PFNEGLCHOOSECONFIGPROC>(eglGetProcAddress("eglChooseConfig"));
++      cast<PFNEGLCHOOSECONFIGPROC>(dlsym(libegl, "eglChooseConfig"));
++
++  typedef EGLint (*PFNEGLGETERRORPROC)();
++  PFNEGLGETERRORPROC eglGetError =
++      cast<PFNEGLGETERRORPROC>(dlsym(libegl, "eglGetError"));
+ 
+   typedef EGLBoolean (*PFNEGLBINDAPIPROC)(EGLint api);
+   PFNEGLBINDAPIPROC eglBindAPI =
+-      cast<PFNEGLBINDAPIPROC>(eglGetProcAddress("eglBindAPI"));
++      cast<PFNEGLBINDAPIPROC>(dlsym(libegl, "eglBindAPI"));
+ 
+   typedef EGLContext (*PFNEGLCREATECONTEXTPROC)(
+       EGLDisplay dpy, EGLConfig config, EGLContext share_context,
+       EGLint const* attrib_list);
+   PFNEGLCREATECONTEXTPROC eglCreateContext =
+-      cast<PFNEGLCREATECONTEXTPROC>(eglGetProcAddress("eglCreateContext"));
++      cast<PFNEGLCREATECONTEXTPROC>(dlsym(libegl, "eglCreateContext"));
+ 
+   typedef EGLBoolean (*PFNEGLDESTROYCONTEXTPROC)(EGLDisplay dpy,
+                                                  EGLContext ctx);
+   PFNEGLDESTROYCONTEXTPROC eglDestroyContext =
+-      cast<PFNEGLDESTROYCONTEXTPROC>(eglGetProcAddress("eglDestroyContext"));
++      cast<PFNEGLDESTROYCONTEXTPROC>(dlsym(libegl, "eglDestroyContext"));
+ 
+   typedef EGLBoolean (*PFNEGLMAKECURRENTPROC)(
+       EGLDisplay dpy, EGLSurface draw, EGLSurface read, EGLContext context);
+   PFNEGLMAKECURRENTPROC eglMakeCurrent =
+-      cast<PFNEGLMAKECURRENTPROC>(eglGetProcAddress("eglMakeCurrent"));
++      cast<PFNEGLMAKECURRENTPROC>(dlsym(libegl, "eglMakeCurrent"));
+ 
+   typedef const char* (*PFNEGLQUERYDEVICESTRINGEXTPROC)(EGLDeviceEXT device,
+                                                         EGLint name);
+@@ -429,20 +445,12 @@ static bool get_egl_gl_status(EGLDisplay dpy,
+   log("GLX_TEST: get_egl_gl_status start\n");
+ 
+   if (!eglChooseConfig || !eglCreateContext || !eglDestroyContext ||
+-      !eglMakeCurrent || !eglQueryDeviceStringEXT) {
++      !eglMakeCurrent) {
+     record_warning("libEGL missing methods for GL test");
+     return false;
+   }
+ 
+-  typedef GLubyte* (*PFNGLGETSTRING)(GLenum);
+-  PFNGLGETSTRING glGetString =
+-      cast<PFNGLGETSTRING>(eglGetProcAddress("glGetString"));
+-
+-#if defined(__arm__) || defined(__aarch64__)
+   bool useGles = true;
+-#else
+-  bool useGles = false;
+-#endif
+ 
+   std::vector<EGLint> attribs;
+   attribs.push_back(EGL_RED_SIZE);
+@@ -454,13 +462,15 @@ static bool get_egl_gl_status(EGLDisplay dpy,
+   if (useGles) {
+     attribs.push_back(EGL_RENDERABLE_TYPE);
+     attribs.push_back(EGL_OPENGL_ES2_BIT);
++    attribs.push_back(EGL_CONFORMANT);
++    attribs.push_back(EGL_OPENGL_ES2_BIT);
+   }
+   attribs.push_back(EGL_NONE);
+ 
+-  EGLConfig config;
+   EGLint num_config;
++  EGLConfig config;
+   if (eglChooseConfig(dpy, attribs.data(), &config, 1, &num_config) ==
+-      EGL_FALSE) {
++      EGL_FALSE || num_config < 1) {
+     record_warning("eglChooseConfig returned an error");
+     return false;
+   }
+@@ -471,15 +481,12 @@ static bool get_egl_gl_status(EGLDisplay dpy,
+     return false;
+   }
+ 
+-  EGLint ctx_attrs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_NONE};
+-  EGLContext ectx = eglCreateContext(dpy, config, EGL_NO_CONTEXT, ctx_attrs);
++  EGLint ctx_attrs_fallback[] = {EGL_CONTEXT_MAJOR_VERSION, 2, EGL_NONE};
++  EGLContext ectx = eglCreateContext(dpy, config, EGL_NO_CONTEXT, ctx_attrs_fallback);
+   if (!ectx) {
+-    EGLint ctx_attrs_fallback[] = {EGL_CONTEXT_MAJOR_VERSION, 2, EGL_NONE};
+-    ectx = eglCreateContext(dpy, config, EGL_NO_CONTEXT, ctx_attrs_fallback);
+-    if (!ectx) {
+-      record_warning("eglCreateContext returned an error");
+-      return false;
+-    }
++    record_warning("eglCreateContext returned an error");
++    printf("EGL error: 0x%04x\n", eglGetError());
++    return false;
+   }
+ 
+   if (eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, ectx) == EGL_FALSE) {
+@@ -489,6 +496,10 @@ static bool get_egl_gl_status(EGLDisplay dpy,
+   }
+   eglDestroyContext(dpy, ectx);
+ 
++  typedef GLubyte* (*PFNGLGETSTRING)(GLenum);
++  PFNGLGETSTRING glGetString =
++      cast<PFNGLGETSTRING>(eglGetProcAddress("glGetString"));
++
+   // Implementations disagree about whether eglGetProcAddress or dlsym
+   // should be used for getting functions from the actual API, see
+   // https://github.com/anholt/libepoxy/commit/14f24485e33816139398d1bd170d617703473738
+@@ -529,7 +540,8 @@ static bool get_egl_gl_status(EGLDisplay dpy,
+   }
+ 
+   EGLDeviceEXT device;
+-  if (eglQueryDisplayAttribEXT(dpy, EGL_DEVICE_EXT, (EGLAttrib*)&device) ==
++  if (eglQueryDeviceStringEXT != nullptr &&
++      eglQueryDisplayAttribEXT(dpy, EGL_DEVICE_EXT, (EGLAttrib*)&device) ==
+       EGL_TRUE) {
+     const char* deviceExtensions =
+         eglQueryDeviceStringEXT(device, EGL_EXTENSIONS);
+@@ -586,13 +598,13 @@ static bool get_egl_status(EGLNativeDisplayType native_dpy) {
+ 
+   typedef EGLDisplay (*PFNEGLGETDISPLAYPROC)(void* native_display);
+   PFNEGLGETDISPLAYPROC eglGetDisplay =
+-      cast<PFNEGLGETDISPLAYPROC>(eglGetProcAddress("eglGetDisplay"));
++      cast<PFNEGLGETDISPLAYPROC>(dlsym(libegl, "eglGetDisplay"));
+ 
+   typedef EGLBoolean (*PFNEGLINITIALIZEPROC)(EGLDisplay dpy, EGLint* major,
+                                              EGLint* minor);
+   PFNEGLINITIALIZEPROC eglInitialize =
+-      cast<PFNEGLINITIALIZEPROC>(eglGetProcAddress("eglInitialize"));
+-  eglTerminate = cast<PFNEGLTERMINATEPROC>(eglGetProcAddress("eglTerminate"));
++      cast<PFNEGLINITIALIZEPROC>(dlsym(libegl, "eglInitialize"));
++  eglTerminate = cast<PFNEGLTERMINATEPROC>(dlsym(libegl, "eglTerminate"));
+ 
+   if (!eglGetDisplay || !eglInitialize || !eglTerminate) {
+     record_warning("libEGL missing methods");
+@@ -614,7 +626,7 @@ static bool get_egl_status(EGLNativeDisplayType native_dpy) {
+   typedef const char* (*PFNEGLGETDISPLAYDRIVERNAMEPROC)(EGLDisplay dpy);
+   PFNEGLGETDISPLAYDRIVERNAMEPROC eglGetDisplayDriverName =
+       cast<PFNEGLGETDISPLAYDRIVERNAMEPROC>(
+-          eglGetProcAddress("eglGetDisplayDriverName"));
++          dlsym(libegl, "eglGetDisplayDriverName"));
+   if (eglGetDisplayDriverName) {
+     const char* driDriver = eglGetDisplayDriverName(dpy);
+     if (driDriver) {
+@@ -622,7 +634,7 @@ static bool get_egl_status(EGLNativeDisplayType native_dpy) {
+     }
+   }
+ 
+-  bool ret = get_egl_gl_status(dpy, eglGetProcAddress);
++  bool ret = get_egl_gl_status(dpy, libegl);
+   log("GLX_TEST: get_egl_status finished with return: %d\n", ret);
+ 
+   return ret;
+-- 
+2.44.0
+

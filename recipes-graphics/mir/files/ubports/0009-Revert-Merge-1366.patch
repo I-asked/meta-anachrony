@@ -1,0 +1,237 @@
+From 280f50915a8458ad804cf4afa7e66ac12fe0aecd Mon Sep 17 00:00:00 2001
+From: Marius Gripsgard <marius@ubports.com>
+Date: Tue, 16 Jun 2020 02:37:51 +0200
+Subject: Revert "Merge #1366"
+
+This reverts commit c11a2daba69390044460f690d487160e26a7bfc2.
+
+Origin: other, https://github.com/MirServer/mir/commit/c11a2daba69390044460f690d487160e26a7bfc2
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/gl/tessellation_helpers.cpp               |  7 ++++--
+ .../server/mir/compositor/buffer_stream.h     |  1 -
+ src/server/compositor/stream.cpp              | 24 ++++++++-----------
+ src/server/compositor/stream.h                |  3 +--
+ .../frontend_wayland/output_manager.cpp       |  2 +-
+ src/server/frontend_wayland/wl_surface.cpp    | 18 ++++----------
+ src/server/frontend_wayland/wl_surface.h      |  1 -
+ 7 files changed, 22 insertions(+), 34 deletions(-)
+
+diff --git a/src/gl/tessellation_helpers.cpp b/src/gl/tessellation_helpers.cpp
+index 3c07e5431d..1318d965e0 100644
+--- a/src/gl/tessellation_helpers.cpp
++++ b/src/gl/tessellation_helpers.cpp
+@@ -26,6 +26,7 @@ namespace geom = mir::geometry;
+ mgl::Primitive mgl::tessellate_renderable_into_rectangle(
+     mg::Renderable const& renderable, geom::Displacement const& offset)
+ {
++    auto const& buf_size = renderable.buffer()->size();
+     auto rect = renderable.screen_position();
+     rect.top_left = rect.top_left - offset;
+     GLfloat left = rect.top_left.x.as_int();
+@@ -36,8 +37,10 @@ mgl::Primitive mgl::tessellate_renderable_into_rectangle(
+     mgl::Primitive rectangle;
+     rectangle.type = GL_TRIANGLE_STRIP;
+ 
+-    GLfloat const tex_right = 1.0f;
+-    GLfloat const tex_bottom = 1.0f;
++    GLfloat tex_right = static_cast<GLfloat>(rect.size.width.as_int()) /
++                        buf_size.width.as_int();
++    GLfloat tex_bottom = static_cast<GLfloat>(rect.size.height.as_int()) /
++                         buf_size.height.as_int();
+ 
+     auto& vertices = rectangle.vertices;
+     vertices[0] = {{left,  top,    0.0f}, {0.0f,      0.0f}};
+diff --git a/src/include/server/mir/compositor/buffer_stream.h b/src/include/server/mir/compositor/buffer_stream.h
+index f51f4a2851..c92d35f360 100644
+--- a/src/include/server/mir/compositor/buffer_stream.h
++++ b/src/include/server/mir/compositor/buffer_stream.h
+@@ -43,7 +43,6 @@ public:
+     virtual ~BufferStream() = default;
+ 
+     virtual auto lock_compositor_buffer(void const* user_id) -> std::shared_ptr<graphics::Buffer> = 0;
+-    /// Logical size of the stream (may be different than buffer sizes if scaled)
+     virtual auto stream_size() -> geometry::Size = 0;
+     virtual auto buffers_ready_for_compositor(void const* user_id) const -> int = 0;
+     virtual void drop_old_buffers() = 0;
+diff --git a/src/server/compositor/stream.cpp b/src/server/compositor/stream.cpp
+index 898980cafd..5bcd524ccb 100644
+--- a/src/server/compositor/stream.cpp
++++ b/src/server/compositor/stream.cpp
+@@ -39,7 +39,7 @@ mc::Stream::Stream(
+     schedule_mode(ScheduleMode::Queueing),
+     schedule(std::make_shared<mc::QueueingSchedule>()),
+     arbiter(std::make_shared<mc::MultiMonitorArbiter>(schedule)),
+-    latest_buffer_size(size),
++    size(size),
+     pf(pf),
+     first_frame_posted(false),
+     frame_callback{[](auto){}}
+@@ -54,10 +54,10 @@ void mc::Stream::submit_buffer(std::shared_ptr<mg::Buffer> const& buffer)
+         BOOST_THROW_EXCEPTION(std::invalid_argument("cannot submit null buffer"));
+ 
+     {
+-        std::lock_guard<decltype(mutex)> lk(mutex);
++        std::lock_guard<decltype(mutex)> lk(mutex); 
+         first_frame_posted = true;
+         pf = buffer->pixel_format();
+-        latest_buffer_size = buffer->size();
++        size = buffer->size();
+         schedule->schedule(buffer);
+     }
+     {
+@@ -68,7 +68,7 @@ void mc::Stream::submit_buffer(std::shared_ptr<mg::Buffer> const& buffer)
+ 
+ void mc::Stream::with_most_recent_buffer_do(std::function<void(mg::Buffer&)> const& fn)
+ {
+-    std::lock_guard<decltype(mutex)> lk(mutex);
++    std::lock_guard<decltype(mutex)> lk(mutex); 
+     fn(*arbiter->snapshot_acquire());
+ }
+ 
+@@ -93,14 +93,12 @@ std::shared_ptr<mg::Buffer> mc::Stream::lock_compositor_buffer(void const* id)
+ geom::Size mc::Stream::stream_size()
+ {
+     std::lock_guard<decltype(mutex)> lk(mutex);
+-    return geom::Size{
+-        roundf(latest_buffer_size.width.as_int() / scale_),
+-        roundf(latest_buffer_size.height.as_int() / scale_)};
++    return size;
+ }
+ 
+ void mc::Stream::allow_framedropping(bool dropping)
+ {
+-    std::lock_guard<decltype(mutex)> lk(mutex);
++    std::lock_guard<decltype(mutex)> lk(mutex); 
+     if (dropping && schedule_mode == ScheduleMode::Queueing)
+     {
+         transition_schedule(std::make_shared<mc::DroppingSchedule>(), lk);
+@@ -132,7 +130,7 @@ void mc::Stream::transition_schedule(
+ 
+ int mc::Stream::buffers_ready_for_compositor(void const* id) const
+ {
+-    std::lock_guard<decltype(mutex)> lk(mutex);
++    std::lock_guard<decltype(mutex)> lk(mutex); 
+     if (arbiter->buffer_ready_for(id))
+         return 1;
+     return 0;
+@@ -140,7 +138,7 @@ int mc::Stream::buffers_ready_for_compositor(void const* id) const
+ 
+ void mc::Stream::drop_old_buffers()
+ {
+-    std::lock_guard<decltype(mutex)> lk(mutex);
++    std::lock_guard<decltype(mutex)> lk(mutex); 
+     std::vector<std::shared_ptr<mg::Buffer>> transferred_buffers;
+     while(schedule->num_scheduled())
+         transferred_buffers.emplace_back(schedule->next_buffer());
+@@ -156,12 +154,10 @@ void mc::Stream::drop_old_buffers()
+ 
+ bool mc::Stream::has_submitted_buffer() const
+ {
+-    std::lock_guard<decltype(mutex)> lk(mutex);
++    std::lock_guard<decltype(mutex)> lk(mutex); 
+     return first_frame_posted;
+ }
+ 
+-void mc::Stream::set_scale(float scale)
++void mc::Stream::set_scale(float)
+ {
+-    std::lock_guard<decltype(mutex)> lk(mutex);
+-    scale_ = scale;
+ }
+diff --git a/src/server/compositor/stream.h b/src/server/compositor/stream.h
+index d9a27fdaca..e0e640dfe0 100644
+--- a/src/server/compositor/stream.h
++++ b/src/server/compositor/stream.h
+@@ -65,8 +65,7 @@ private:
+     ScheduleMode schedule_mode;
+     std::shared_ptr<Schedule> schedule;
+     std::shared_ptr<MultiMonitorArbiter> const arbiter;
+-    geometry::Size latest_buffer_size;
+-    float scale_{1.0f};
++    geometry::Size size; 
+     MirPixelFormat pf;
+     bool first_frame_posted;
+ 
+diff --git a/src/server/frontend_wayland/output_manager.cpp b/src/server/frontend_wayland/output_manager.cpp
+index 3fb83a04e3..2baf3b9be7 100644
+--- a/src/server/frontend_wayland/output_manager.cpp
++++ b/src/server/frontend_wayland/output_manager.cpp
+@@ -133,7 +133,7 @@ void mf::Output::send_initial_config(wl_resource* client_resource, mg::DisplayCo
+     }
+ 
+     if (wl_resource_get_version(client_resource) >= WL_OUTPUT_SCALE_SINCE_VERSION)
+-        wl_output_send_scale(client_resource, ceil(config.scale));
++        wl_output_send_scale(client_resource, 1);
+ 
+     if (wl_resource_get_version(client_resource) >= WL_OUTPUT_DONE_SINCE_VERSION)
+         wl_output_send_done(client_resource);
+diff --git a/src/server/frontend_wayland/wl_surface.cpp b/src/server/frontend_wayland/wl_surface.cpp
+index c7c497a423..a97ab6c505 100644
+--- a/src/server/frontend_wayland/wl_surface.cpp
++++ b/src/server/frontend_wayland/wl_surface.cpp
+@@ -57,9 +57,6 @@ void mf::WlSurfaceState::update_from(WlSurfaceState const& source)
+     if (source.buffer)
+         buffer = source.buffer;
+ 
+-    if (source.scale)
+-        scale = source.scale;
+-
+     if (source.offset)
+         offset = source.offset;
+ 
+@@ -316,9 +313,6 @@ void mf::WlSurface::commit(WlSurfaceState const& state)
+     if (state.input_shape)
+         input_shape = state.input_shape.value();
+ 
+-    if (state.scale)
+-        stream->set_scale(state.scale.value());
+-
+     if (state.buffer)
+     {
+         wl_resource * buffer = *state.buffer;
+@@ -377,15 +371,12 @@ void mf::WlSurface::commit(WlSurfaceState const& state)
+                     mir_buffer->id().as_value());
+             }
+ 
+-            stream->submit_buffer(mir_buffer);
+-            auto const new_buffer_size = stream->stream_size();
+-
+-            if (!input_shape && std::experimental::make_optional(new_buffer_size) != buffer_size_)
++            if (!input_shape && (!buffer_size_ || mir_buffer->size() != buffer_size_.value()))
+             {
+                 state.invalidate_surface_data(); // input shape needs to be recalculated for the new size
+             }
+-
+-            buffer_size_ = new_buffer_size;
++            buffer_size_ = mir_buffer->size();
++            stream->submit_buffer(mir_buffer);
+         }
+     }
+     else
+@@ -424,7 +415,8 @@ void mf::WlSurface::set_buffer_transform(int32_t transform)
+ 
+ void mf::WlSurface::set_buffer_scale(int32_t scale)
+ {
+-    pending.scale = scale;
++    (void)scale;
++    // TODO
+ }
+ 
+ mf::NullWlSurfaceRole::NullWlSurfaceRole(WlSurface* surface) :
+diff --git a/src/server/frontend_wayland/wl_surface.h b/src/server/frontend_wayland/wl_surface.h
+index ad6a35ad66..cd912b56b5 100644
+--- a/src/server/frontend_wayland/wl_surface.h
++++ b/src/server/frontend_wayland/wl_surface.h
+@@ -80,7 +80,6 @@ struct WlSurfaceState
+     // if it's nullptr, there is a new buffer and it is a null buffer, which should replace the current buffer
+     std::experimental::optional<wl_resource*> buffer;
+ 
+-    std::experimental::optional<int> scale;
+     std::experimental::optional<geometry::Displacement> offset;
+     std::experimental::optional<std::experimental::optional<std::vector<geometry::Rectangle>>> input_shape;
+     std::vector<std::shared_ptr<Callback>> frame_callbacks;
+-- 
+2.25.1
+

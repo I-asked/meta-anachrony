@@ -1,0 +1,22 @@
+Author: Oren Klopfer <oren+12345@taumoda.com>
+Date: Mon, 19 Sep 2023 00:20:00 +0200
+Subject: miral: fix missing dsi enumeration
+
+* Display output types are enumerated in multiple places across mir. In all of 
+  them except for this file, Virtual, DSI, and DPI are enumerated. make miral's 
+  output enumeration consistent with rest of mir graphics.
+
+--- a/include/miral/miral/output.h
++++ b/include/miral/miral/output.h
+@@ -54,7 +54,10 @@
+         hdmia,
+         hdmib,
+         tv,
+-        edp
++        edp,
++        virt,
++        dsi,
++        dpi
+     };
+ 
+     explicit Output(const mir::graphics::DisplayConfigurationOutput &output);

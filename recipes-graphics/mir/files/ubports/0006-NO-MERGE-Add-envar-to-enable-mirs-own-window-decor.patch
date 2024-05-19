@@ -1,0 +1,69 @@
+From 364ea5b698c9dfcad4c70fdc8f7daf05085cc434 Mon Sep 17 00:00:00 2001
+From: Marius Gripsgard <marius@ubports.com>
+Date: Thu, 16 Apr 2020 18:19:00 +0200
+Subject: [NO MERGE] Add envar to enable mirs own window decor
+
+[ratchanan@ubports.com: IMO we should have a better approach to control this.
+ The best probably would be a Mir option, which would imply env support.]
+
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2021-06-16
+---
+ src/server/shell/default_configuration.cpp | 33 +++++++++++++---------
+ 1 file changed, 19 insertions(+), 14 deletions(-)
+
+diff --git a/src/server/shell/default_configuration.cpp b/src/server/shell/default_configuration.cpp
+index 0803c02f06..1a15459ca8 100644
+--- a/src/server/shell/default_configuration.cpp
++++ b/src/server/shell/default_configuration.cpp
+@@ -28,6 +28,7 @@
+ #include "graphics_display_layout.h"
+ #include "decoration/basic_manager.h"
+ #include "decoration/basic_decoration.h"
++#include "decoration/null_manager.h"
+ 
+ namespace ms = mir::scene;
+ namespace msh = mir::shell;
+@@ -69,20 +70,24 @@ auto mir::DefaultServerConfiguration::the_decoration_manager() -> std::shared_pt
+     return decoration_manager(
+         [this]()->std::shared_ptr<msd::Manager>
+         {
+-            return std::make_shared<msd::BasicManager>(
+-                [buffer_allocator = the_buffer_allocator(),
+-                 executor = the_main_loop(),
+-                 cursor_images = the_cursor_images()](
+-                    std::shared_ptr<shell::Shell> const& shell,
+-                    std::shared_ptr<scene::Surface> const& surface) -> std::unique_ptr<msd::Decoration>
+-                {
+-                    return std::make_unique<msd::BasicDecoration>(
+-                        shell,
+-                        buffer_allocator,
+-                        executor,
+-                        cursor_images,
+-                        surface);
+-                });
++            bool const decor = getenv("MIR_DECOR");
++            if (!decor)
++                return std::make_shared<msd::NullManager>();
++            else
++                return std::make_shared<msd::BasicManager>(
++                    [buffer_allocator = the_buffer_allocator(),
++                     executor = the_main_loop(),
++                     cursor_images = the_cursor_images()](
++                        std::shared_ptr<shell::Shell> const& shell,
++                        std::shared_ptr<scene::Surface> const& surface) -> std::unique_ptr<msd::Decoration>
++                    {
++                        return std::make_unique<msd::BasicDecoration>(
++                            shell,
++                            buffer_allocator,
++                            executor,
++                            cursor_images,
++                            surface);
++                    });
+         });
+ }
+ 
+-- 
+2.25.1
+

@@ -1,0 +1,213 @@
+From 724bf5085e180949ac42a8dcf68eabd8d70d7901 Mon Sep 17 00:00:00 2001
+From: NeKit <nekit1000@gmail.com>
+Date: Wed, 29 Nov 2017 17:01:12 +0300
+Subject: [PATCH 05/10] x11nativewindow: check for window resizes using Present
+ extension when possible
+
+---
+ hybris/egl/platforms/x11/Makefile.am     |  2 +-
+ hybris/egl/platforms/x11/x11_window.cpp  | 77 ++++++++++++++++++------
+ hybris/egl/platforms/x11/x11_window.h    |  8 ++-
+ hybris/egl/platforms/x11/xcb_drihybris.h |  2 +-
+ 4 files changed, 66 insertions(+), 23 deletions(-)
+
+diff --git a/hybris/egl/platforms/x11/Makefile.am b/hybris/egl/platforms/x11/Makefile.am
+index 0540ca5..22eac5e 100644
+--- a/hybris/egl/platforms/x11/Makefile.am
++++ b/hybris/egl/platforms/x11/Makefile.am
+@@ -31,7 +31,7 @@ eglplatform_x11_la_LDFLAGS = \
+ 	-avoid-version -module -shared -export-dynamic \
+ 	$(top_builddir)/egl/platforms/common/libhybris-eglplatformcommon.la \
+ 	$(top_builddir)/hardware/libhardware.la \
+-	-lXext -lxcb -lX11-xcb
++	-lXext -lxcb -lX11-xcb -lxcb-present
+ 
+ if HAS_ANDROID_4_2_0
+ eglplatform_x11_la_LDFLAGS += $(top_builddir)/libsync/libsync.la
+diff --git a/hybris/egl/platforms/x11/x11_window.cpp b/hybris/egl/platforms/x11/x11_window.cpp
+index f585dce..6c7be45 100644
+--- a/hybris/egl/platforms/x11/x11_window.cpp
++++ b/hybris/egl/platforms/x11/x11_window.cpp
+@@ -125,6 +125,7 @@ X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_de
+     m_xcb_gc = xcb_generate_id(m_connection);
+     xcb_create_gc(m_connection, m_xcb_gc, m_window, 0, 0);
+ 
++    m_specialEvent = 0;
+     m_haveDRIHybris = false;
+     tryEnableDRIHybris();
+ 
+@@ -172,18 +173,19 @@ int X11NativeWindow::dequeueBuffer(BaseNativeWindowBuffer **buffer, int *fenceFd
+     X11NativeWindowBuffer *wnb=NULL;
+     TRACE("%p", buffer);
+ 
+-    lock();
+     readQueue(false);
+ 
+     HYBRIS_TRACE_BEGIN("x11-platform", "dequeueBuffer_wait_for_buffer", "");
+ 
+     HYBRIS_TRACE_COUNTER("x11-platform", "m_freeBufs", "%i", m_freeBufs);
+ 
+-    while (m_freeBufs==0) {
++    while (m_freeBufs == 0) {
+         HYBRIS_TRACE_COUNTER("x11-platform", "m_freeBufs", "%i", m_freeBufs);
+         readQueue(true);
+     }
+ 
++    lock();
++
+     std::list<X11NativeWindowBuffer *>::iterator it = m_bufList.begin();
+     for (; it != m_bufList.end(); it++)
+     {
+@@ -254,11 +256,18 @@ int X11NativeWindow::readQueue(bool block)
+     int ret = 0;
+ 
+     if (++m_queueReads == 1) {
+-//         if (block) {
+-//             ret = wl_display_dispatch_queue(m_display, wl_queue);
+-//         } else {
+-//             ret = wl_display_dispatch_queue_pending(m_display, wl_queue);
+-//         }
++        if (m_specialEvent) {
++            xcb_generic_event_t    *ev;
++
++            if (!block)
++            {
++                while ((ev = xcb_poll_for_special_event(m_connection,
++                                                        m_specialEvent)) != NULL) {
++                    xcb_present_generic_event_t *ge = (xcb_present_generic_event_t *) ev;
++                    handlePresentEvent(ge);
++                }
++            }
++        }
+ 
+         // all threads waiting on the false branch will wake and return now, so we
+         // can safely set m_queueReads to 0 here instead of relying on every thread
+@@ -271,11 +280,6 @@ int X11NativeWindow::readQueue(bool block)
+ 
+         pthread_cond_broadcast(&cond);
+ 
+-//         if (ret < 0) {
+-//             TRACE("wl_display_dispatch_queue returned an error");
+-//             check_fatal_error(m_display);
+-//             return ret;
+-//         }
+     } else if (block) {
+         while (m_queueReads > 0) {
+             pthread_cond_wait(&cond, &mutex);
+@@ -654,17 +658,50 @@ void X11NativeWindow::copyToX11(X11NativeWindowBuffer *wnb) {
+ 
+ void X11NativeWindow::tryEnableDRIHybris()
+ {
+-   const xcb_query_extension_reply_t *extension;
++    const xcb_query_extension_reply_t *extension;
++    xcb_void_cookie_t cookie;
++    xcb_generic_error_t *error;
+ 
+-   xcb_prefetch_extension_data (m_connection, &xcb_drihybris_id);
++    xcb_prefetch_extension_data (m_connection, &xcb_drihybris_id);
++    xcb_prefetch_extension_data (m_connection, &xcb_present_id);
+ 
+-   extension = xcb_get_extension_data(m_connection, &xcb_drihybris_id);
+-   if (!(extension && extension->present))
+-      return;
++    extension = xcb_get_extension_data(m_connection, &xcb_drihybris_id);
++    if (!(extension && extension->present))
++        return;
+ 
+-   m_haveDRIHybris = true;
+-   // HYBRIS_PIXEL_FORMAT_RGBA_8888 is used in glamor for buffer import
+-   m_format = HAL_PIXEL_FORMAT_RGBA_8888;
++    extension = xcb_get_extension_data(m_connection, &xcb_present_id);
++    if (!(extension && extension->present))
++        return;
++
++    m_specialEventId = xcb_generate_id(m_connection);
++    m_specialEvent = xcb_register_for_special_xge(m_connection,
++                            &xcb_present_id, m_specialEventId, NULL);
++
++    cookie = xcb_present_select_input_checked(m_connection,
++            m_specialEventId, m_window,
++            XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY |
++            XCB_PRESENT_EVENT_MASK_CONFIGURE_NOTIFY);
++
++    error = xcb_request_check(m_connection, cookie);
++    if (error) {
++        return;
++    }
++
++    m_haveDRIHybris = true;
++    // HYBRIS_PIXEL_FORMAT_RGBA_8888 is used in glamor for buffer import
++    m_format = HAL_PIXEL_FORMAT_RGBA_8888;
++}
++
++void X11NativeWindow::handlePresentEvent(xcb_present_generic_event_t *ge)
++{
++    switch (ge->evtype) {
++    case XCB_PRESENT_CONFIGURE_NOTIFY: {
++        xcb_present_configure_notify_event_t *ce = (xcb_present_configure_notify_event_t *) ge;
++        printf("XCB_PRESENT_CONFIGURE_NOTIFY: %dx%d\n", ce->width, ce->height);
++        resize(ce->width, ce->height);
++        break;
++    }
++    }
+ }
+ 
+ void X11NativeWindowBuffer::pixmap_from_buffer(xcb_connection_t *connection, xcb_drawable_t drawable)
+diff --git a/hybris/egl/platforms/x11/x11_window.h b/hybris/egl/platforms/x11/x11_window.h
+index 0385154..cceaee5 100644
+--- a/hybris/egl/platforms/x11/x11_window.h
++++ b/hybris/egl/platforms/x11/x11_window.h
+@@ -31,6 +31,7 @@
+ #include <hardware/gralloc.h>
+ extern "C" {
+ #include <X11/Xlib-xcb.h>
++#include <xcb/present.h>
+ #include <sys/shm.h>
+ #include <X11/extensions/XShm.h>
+ #include <pthread.h>
+@@ -156,6 +157,7 @@ private:
+ 
+     void copyToX11(X11NativeWindowBuffer *wnb);
+     void tryEnableDRIHybris();
++    void handlePresentEvent(xcb_present_generic_event_t *ge);
+ 
+     std::list<X11NativeWindowBuffer *> m_bufList;
+     std::list<X11NativeWindowBuffer *> fronted;
+@@ -168,8 +170,12 @@ private:
+     XImage *m_image;
+     XShmSegmentInfo m_shminfo;
+     GC m_gc;
++
+     xcb_connection_t *m_connection;
+     xcb_gcontext_t m_xcb_gc;
++    xcb_present_event_t m_specialEventId;
++    xcb_special_event_t *m_specialEvent;
++
+     bool m_useShm;
+     bool m_haveDRIHybris;
+     
+@@ -180,7 +186,7 @@ private:
+     unsigned int m_defaultWidth;
+     unsigned int m_defaultHeight;
+     unsigned int m_usage;
+-    struct android_wlegl *m_android_wlegl;
++
+     alloc_device_t* m_alloc;
+     pthread_mutex_t mutex;
+     pthread_cond_t cond;
+diff --git a/hybris/egl/platforms/x11/xcb_drihybris.h b/hybris/egl/platforms/x11/xcb_drihybris.h
+index 0ffdb8b..974828d 100644
+--- a/hybris/egl/platforms/x11/xcb_drihybris.h
++++ b/hybris/egl/platforms/x11/xcb_drihybris.h
+@@ -25,7 +25,7 @@ extern "C" {
+ extern xcb_extension_t xcb_drihybris_id;
+ 
+ /** Opcode for xcb_drihybris_pixmap_from_buffer. */
+-#define XCB_DRIHYBRIS_PIXMAP_FROM_BUFFER 2
++#define XCB_DRIHYBRIS_PIXMAP_FROM_BUFFER 1
+ 
+ /**
+  * @brief xcb_drihybris_pixmap_from_buffer_request_t
+-- 
+2.44.0
+

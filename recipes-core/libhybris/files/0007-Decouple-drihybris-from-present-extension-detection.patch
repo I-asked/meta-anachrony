@@ -1,0 +1,241 @@
+From ba3c65ec8f96c66ba6fa253ba7b6236d35e8d037 Mon Sep 17 00:00:00 2001
+From: TheKit <nekit1000@gmail.com>
+Date: Wed, 26 Dec 2018 09:46:34 +0000
+Subject: [PATCH 07/10] Decouple drihybris from present extension detection
+
+---
+ hybris/egl/platforms/x11/eglplatform_x11.cpp | 69 ++++++++++++--------
+ hybris/egl/platforms/x11/x11_window.cpp      | 31 ++++-----
+ hybris/egl/platforms/x11/x11_window.h        |  4 +-
+ 3 files changed, 57 insertions(+), 47 deletions(-)
+
+diff --git a/hybris/egl/platforms/x11/eglplatform_x11.cpp b/hybris/egl/platforms/x11/eglplatform_x11.cpp
+index 001b733..659ec4c 100644
+--- a/hybris/egl/platforms/x11/eglplatform_x11.cpp
++++ b/hybris/egl/platforms/x11/eglplatform_x11.cpp
+@@ -53,10 +53,13 @@ extern "C" {
+ 
+ #include <X11/Xlib.h>
+ #include <X11/Xutil.h>
++#include "xcb_drihybris.h"
+ 
+ static gralloc_module_t *gralloc = 0;
+ static alloc_device_t *alloc = 0;
+-
++static Display *x11_display = NULL;
++static xcb_connection_t *xcb_connection = NULL;
++static bool have_drihybris = false;
+ 
+ static const char *  (*_eglQueryString)(EGLDisplay dpy, EGLint name) = NULL;
+ static __eglMustCastToProperFunctionPointerType (*_eglGetProcAddress)(const char *procname) = NULL;
+@@ -110,6 +113,19 @@ extern "C" _EGLDisplay *x11ws_GetDisplay(EGLNativeDisplayType display)
+ 	X11Display *xdpy = new X11Display;
+ 	xdpy->xl_display = (Display *)display;
+ 
++	if (!x11_display && xdpy->xl_display) {
++		x11_display = xdpy->xl_display;
++
++		// Check if we have drihybris support
++		xcb_connection = XGetXCBConnection(x11_display);
++		const xcb_query_extension_reply_t *extension;
++
++		xcb_prefetch_extension_data (xcb_connection, &xcb_drihybris_id);
++		extension = xcb_get_extension_data(xcb_connection, &xcb_drihybris_id);
++		if (extension && extension->present)
++			have_drihybris = true;
++	}
++
+ 	return &xdpy->base;
+ }
+ 
+@@ -133,7 +149,8 @@ extern "C" EGLNativeWindowType x11ws_CreateWindow(EGLNativeWindowType win, _EGLD
+ 		abort();
+ 	}
+ 
+-	X11NativeWindow *window = new X11NativeWindow(xdpy->xl_display, xlib_window, alloc, gralloc);
++	X11NativeWindow *window = new X11NativeWindow(xdpy->xl_display, xlib_window,
++												alloc, gralloc, have_drihybris);
+ 	window->common.incRef(&window->common);
+ 	return (EGLNativeWindowType) static_cast<struct ANativeWindow *>(window);
+ }
+@@ -194,29 +211,29 @@ extern "C" void x11ws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, E
+ 
+ extern "C" EGLBoolean x11ws_eglGetConfigAttrib(struct _EGLDisplay *display, EGLConfig config, EGLint attribute, EGLint *value)
+ {
+-    TRACE("attribute:%i", attribute);
+-    if (attribute == EGL_NATIVE_VISUAL_ID)
+-    {
+-        X11Display *xdpy = (X11Display *)display;
+-        XVisualInfo visinfo_template;
+-        XVisualInfo *visinfo = NULL;
+-        int visinfos_count = 0;
+-
+-        visinfo_template.depth = 32;
+-        visinfo = XGetVisualInfo (xdpy->xl_display,
+-                            VisualDepthMask,
+-                            &visinfo_template,
+-                            &visinfos_count);
+-
+-        if (visinfos_count)
+-        {
+-            TRACE("visinfo.visualid:%i", attribute);
+-            *value = visinfo->visualid;
+-            return EGL_TRUE;
+-        }
+-
+-    }
+-    return EGL_FALSE;
++	TRACE("attribute:%i", attribute);
++	if (attribute == EGL_NATIVE_VISUAL_ID)
++	{
++		X11Display *xdpy = (X11Display *)display;
++		XVisualInfo visinfo_template;
++		XVisualInfo *visinfo = NULL;
++		int visinfos_count = 0;
++
++		visinfo_template.depth = 32;
++		visinfo = XGetVisualInfo (xdpy->xl_display,
++							VisualDepthMask,
++							&visinfo_template,
++							&visinfos_count);
++
++		if (visinfos_count)
++		{
++			TRACE("visinfo.visualid:%i", attribute);
++			*value = visinfo->visualid;
++			return EGL_TRUE;
++		}
++
++	}
++	return EGL_FALSE;
+ }
+ 
+ struct ws_module ws_module_info = {
+@@ -231,5 +248,5 @@ struct ws_module ws_module_info = {
+ 	x11ws_prepareSwap,
+ 	x11ws_finishSwap,
+ 	x11ws_setSwapInterval,
+-    x11ws_eglGetConfigAttrib
++	x11ws_eglGetConfigAttrib
+ };
+diff --git a/hybris/egl/platforms/x11/x11_window.cpp b/hybris/egl/platforms/x11/x11_window.cpp
+index 6c88e14..3327d29 100644
+--- a/hybris/egl/platforms/x11/x11_window.cpp
++++ b/hybris/egl/platforms/x11/x11_window.cpp
+@@ -59,7 +59,8 @@ void X11NativeWindow::unlock()
+     pthread_mutex_unlock(&this->mutex);
+ }
+ 
+-X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_device_t* alloc, gralloc_module_t* gralloc)
++X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_device_t* alloc,
++                                 gralloc_module_t* gralloc, bool drihybris)
+ {
+     int wayland_ok;
+ 
+@@ -69,8 +70,8 @@ X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_de
+     this->m_connection = XGetXCBConnection(xl_display);
+     this->m_image = 0;
+     this->m_useShm = true;
+-    this->m_format = HAL_PIXEL_FORMAT_BGRA_8888;
+-    //this->m_format = HAL_PIXEL_FORMAT_RGBA_8888;
++    this->m_format = drihybris ? HAL_PIXEL_FORMAT_RGBA_8888 : HAL_PIXEL_FORMAT_BGRA_8888;
++    this->m_haveDRIHybris = drihybris;
+ 
+     const_cast<int&>(ANativeWindow::minSwapInterval) = 0;
+     const_cast<int&>(ANativeWindow::maxSwapInterval) = 1;
+@@ -127,8 +128,7 @@ X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_de
+     xcb_create_gc(m_connection, m_xcb_gc, m_window, 0, 0);
+ 
+     m_specialEvent = 0;
+-    m_haveDRIHybris = false;
+-    tryEnableDRIHybris();
++    registerForPresentEvents();
+ 
+     m_usage=GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_SW_READ_OFTEN;
+     pthread_mutex_init(&mutex, NULL);
+@@ -619,7 +619,7 @@ void X11NativeWindow::copyToX11(X11NativeWindowBuffer *wnb) {
+         {
+             m_image = XShmCreateImage(m_display,
+                         CopyFromParent,
+-                        32,
++                        m_depth,
+                         ZPixmap, 0, &m_shminfo, wnb->stride, wnb->height);
+ 
+             m_shminfo.shmid = shmget(IPC_PRIVATE,
+@@ -637,7 +637,7 @@ void X11NativeWindow::copyToX11(X11NativeWindowBuffer *wnb) {
+         {
+             m_image = XCreateImage(m_display,
+                                 CopyFromParent,
+-                                32,
++                                m_depth,
+                                 ZPixmap, 0, (char *)vaddr, wnb->stride, wnb->height, 32, 0);
+         }
+     }
+@@ -670,19 +670,13 @@ void X11NativeWindow::copyToX11(X11NativeWindowBuffer *wnb) {
+     unlock();
+ }
+ 
+-void X11NativeWindow::tryEnableDRIHybris()
++void X11NativeWindow::registerForPresentEvents()
+ {
+     const xcb_query_extension_reply_t *extension;
+     xcb_void_cookie_t cookie;
+     xcb_generic_error_t *error;
+ 
+-    xcb_prefetch_extension_data (m_connection, &xcb_drihybris_id);
+-    xcb_prefetch_extension_data (m_connection, &xcb_present_id);
+-
+-    extension = xcb_get_extension_data(m_connection, &xcb_drihybris_id);
+-    if (!(extension && extension->present))
+-        return;
+-
++    xcb_prefetch_extension_data(m_connection, &xcb_present_id);
+     extension = xcb_get_extension_data(m_connection, &xcb_present_id);
+     if (!(extension && extension->present))
+         return;
+@@ -700,10 +694,7 @@ void X11NativeWindow::tryEnableDRIHybris()
+     if (error) {
+         return;
+     }
+-
+-    m_haveDRIHybris = true;
+-    // HYBRIS_PIXEL_FORMAT_RGBA_8888 is used in glamor for buffer import
+-    m_format = HAL_PIXEL_FORMAT_RGBA_8888;
++    TRACE("registered for present events\n");
+ }
+ 
+ void X11NativeWindow::handlePresentEvent(xcb_present_generic_event_t *ge)
+@@ -711,7 +702,7 @@ void X11NativeWindow::handlePresentEvent(xcb_present_generic_event_t *ge)
+     switch (ge->evtype) {
+     case XCB_PRESENT_CONFIGURE_NOTIFY: {
+         xcb_present_configure_notify_event_t *ce = (xcb_present_configure_notify_event_t *) ge;
+-        printf("XCB_PRESENT_CONFIGURE_NOTIFY: %dx%d\n", ce->width, ce->height);
++        TRACE("XCB_PRESENT_CONFIGURE_NOTIFY: %dx%d\n", ce->width, ce->height);
+         resize(ce->width, ce->height);
+         break;
+     }
+diff --git a/hybris/egl/platforms/x11/x11_window.h b/hybris/egl/platforms/x11/x11_window.h
+index e5be070..b8f0075 100644
+--- a/hybris/egl/platforms/x11/x11_window.h
++++ b/hybris/egl/platforms/x11/x11_window.h
+@@ -119,7 +119,8 @@ public:
+ 
+ class X11NativeWindow : public BaseNativeWindow {
+ public:
+-    X11NativeWindow(Display* xl_display, Window xl_window, alloc_device_t* alloc, gralloc_module_t* gralloc);
++    X11NativeWindow(Display* xl_display, Window xl_window, alloc_device_t* alloc,
++                                  gralloc_module_t* gralloc, bool drihybris);
+     ~X11NativeWindow();
+ 
+     void lock();
+@@ -161,6 +162,7 @@ private:
+ 
+     void copyToX11(X11NativeWindowBuffer *wnb);
+     void tryEnableDRIHybris();
++    void registerForPresentEvents();
+     void handlePresentEvent(xcb_present_generic_event_t *ge);
+ 
+     std::list<X11NativeWindowBuffer *> m_bufList;
+-- 
+2.44.0
+

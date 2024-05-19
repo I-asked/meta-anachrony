@@ -1,0 +1,220 @@
+From b2762bddd1a7280059c6ec0193b8ca909f1a44ca Mon Sep 17 00:00:00 2001
+From: NeKit <nekit1000@gmail.com>
+Date: Mon, 26 Aug 2019 23:40:25 +0200
+Subject: [PATCH 08/10] x11nativewindow: support gralloc1 by relying on
+ libhybris module
+
+---
+ hybris/egl/platforms/x11/eglplatform_x11.cpp | 12 +++----
+ hybris/egl/platforms/x11/x11_window.cpp      | 15 ++++----
+ hybris/egl/platforms/x11/x11_window.h        | 37 ++++++++------------
+ 3 files changed, 25 insertions(+), 39 deletions(-)
+
+diff --git a/hybris/egl/platforms/x11/eglplatform_x11.cpp b/hybris/egl/platforms/x11/eglplatform_x11.cpp
+index 659ec4c..e2db8f1 100644
+--- a/hybris/egl/platforms/x11/eglplatform_x11.cpp
++++ b/hybris/egl/platforms/x11/eglplatform_x11.cpp
+@@ -48,6 +48,7 @@ extern "C" {
+ #include <wayland-egl.h>
+ }
+ 
++#include <hybris/gralloc/gralloc.h>
+ #include "x11_window.h"
+ #include "logging.h"
+ 
+@@ -55,8 +56,6 @@ extern "C" {
+ #include <X11/Xutil.h>
+ #include "xcb_drihybris.h"
+ 
+-static gralloc_module_t *gralloc = 0;
+-static alloc_device_t *alloc = 0;
+ static Display *x11_display = NULL;
+ static xcb_connection_t *xcb_connection = NULL;
+ static bool have_drihybris = false;
+@@ -74,11 +73,8 @@ struct X11Display {
+ 
+ extern "C" void x11ws_init_module(struct ws_egl_interface *egl_iface)
+ {
+-	int err;
+-	hw_get_module(GRALLOC_HARDWARE_MODULE_ID, (const hw_module_t **) &gralloc);
+-	err = gralloc_open((const hw_module_t *) gralloc, &alloc);
+-	TRACE("++ %lu x11: got gralloc %p err:%s", pthread_self(), gralloc, strerror(-err));
+-	eglplatformcommon_init(egl_iface, gralloc, alloc);
++	hybris_gralloc_initialize(0);
++	eglplatformcommon_init(egl_iface);
+ }
+ 
+ static void _init_egl_funcs(EGLDisplay display)
+@@ -150,7 +146,7 @@ extern "C" EGLNativeWindowType x11ws_CreateWindow(EGLNativeWindowType win, _EGLD
+ 	}
+ 
+ 	X11NativeWindow *window = new X11NativeWindow(xdpy->xl_display, xlib_window,
+-												alloc, gralloc, have_drihybris);
++                                                  have_drihybris);
+ 	window->common.incRef(&window->common);
+ 	return (EGLNativeWindowType) static_cast<struct ANativeWindow *>(window);
+ }
+diff --git a/hybris/egl/platforms/x11/x11_window.cpp b/hybris/egl/platforms/x11/x11_window.cpp
+index 3327d29..087f3c5 100644
+--- a/hybris/egl/platforms/x11/x11_window.cpp
++++ b/hybris/egl/platforms/x11/x11_window.cpp
+@@ -59,8 +59,8 @@ void X11NativeWindow::unlock()
+     pthread_mutex_unlock(&this->mutex);
+ }
+ 
+-X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_device_t* alloc,
+-                                 gralloc_module_t* gralloc, bool drihybris)
++X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window,
++                                 bool drihybris)
+ {
+     int wayland_ok;
+ 
+@@ -77,9 +77,6 @@ X11NativeWindow::X11NativeWindow(Display* xl_display, Window xl_window, alloc_de
+     const_cast<int&>(ANativeWindow::maxSwapInterval) = 1;
+     // This is the default as per the EGL documentation
+     this->m_swap_interval = 1;
+-
+-    this->m_alloc = alloc;
+-    m_gralloc = gralloc;
+     
+     TRACE("getting X11 window information");
+ 
+@@ -536,7 +533,7 @@ X11NativeWindowBuffer *X11NativeWindow::addBuffer() {
+ 
+     X11NativeWindowBuffer *wnb;
+ 
+-    wnb = new ClientX11Buffer(m_alloc, m_width, m_height, m_format, m_usage, m_depth);
++    wnb = new ClientX11Buffer(m_width, m_height, m_format, m_usage, m_depth);
+     m_bufList.push_back(wnb);
+     ++m_freeBufs;
+ 
+@@ -608,7 +605,7 @@ void X11NativeWindow::copyToX11(X11NativeWindowBuffer *wnb) {
+     void *vaddr;
+     std::list<X11NativeWindowBuffer *>::iterator it;
+ 
+-    ret = m_gralloc->lock(m_gralloc, wnb->handle, wnb->usage, 0, 0, wnb->width, wnb->height, &vaddr);
++    ret = hybris_gralloc_lock(wnb->handle, wnb->usage, 0, 0, wnb->width, wnb->height, &vaddr);
+     TRACE("wnb:%p gralloc lock returns %i", wnb, ret);
+     TRACE("wnb:%p lock to vaddr %p", wnb, vaddr);
+     TRACE("wnb:%p width=%d stride=%d height=%d format=%d", wnb, wnb->width, wnb->stride, wnb->height, wnb->format);
+@@ -646,14 +643,14 @@ void X11NativeWindow::copyToX11(X11NativeWindowBuffer *wnb) {
+     if (m_useShm)
+     {
+         memcpy(m_image->data, vaddr, m_image->bytes_per_line * m_image->height);
+-        m_gralloc->unlock(m_gralloc, wnb->handle);
++        hybris_gralloc_unlock(wnb->handle);
+         XShmPutImage(m_display, m_window, m_gc, m_image, 0, 0, 0, 0, m_width, m_height, 0);
+     }
+     else
+     {
+         m_image->data = (char *)vaddr;
+         XPutImage(m_display, m_window, m_gc, m_image, 0, 0, 0, 0, m_width, m_height);
+-        m_gralloc->unlock(m_gralloc, wnb->handle);
++        hybris_gralloc_unlock(wnb->handle);
+     }
+ 
+     lock();
+diff --git a/hybris/egl/platforms/x11/x11_window.h b/hybris/egl/platforms/x11/x11_window.h
+index b8f0075..6eb6df9 100644
+--- a/hybris/egl/platforms/x11/x11_window.h
++++ b/hybris/egl/platforms/x11/x11_window.h
+@@ -28,7 +28,8 @@
+ #define X11_WINDOW_H
+ #include "nativewindowbase.h"
+ #include <linux/fb.h>
+-#include <hardware/gralloc.h>
++#include <hybris/gralloc/gralloc.h>
++
+ extern "C" {
+ #include <X11/Xlib-xcb.h>
+ #include <xcb/present.h>
+@@ -36,6 +37,7 @@ extern "C" {
+ #include <X11/extensions/XShm.h>
+ #include <pthread.h>
+ }
++
+ #include <list>
+ #include <deque>
+ 
+@@ -71,16 +73,13 @@ class ClientX11Buffer : public X11NativeWindowBuffer
+ {
+ friend class X11NativeWindow;
+ protected:
+-    ClientX11Buffer()
+-        : m_alloc(0)
+-    {}
+-
+-    ClientX11Buffer(alloc_device_t* alloc_device,
+-                            unsigned int width,
+-                            unsigned int height,
+-                            unsigned int format,
+-                            unsigned int usage,
+-                            unsigned int windowDepth)
++    ClientX11Buffer() {}
++
++    ClientX11Buffer(unsigned int width,
++                    unsigned int height,
++                    unsigned int format,
++                    unsigned int usage,
++                    unsigned int windowDepth)
+     {
+         // Base members
+         ANativeWindowBuffer::width = width;
+@@ -90,11 +89,10 @@ protected:
+ 
+         this->busy = 0;
+         this->other = NULL;
+-        this->m_alloc = alloc_device;
+-        int alloc_ok = this->m_alloc->alloc(this->m_alloc,
+-                this->width ? this->width : 1, this->height ? this->height : 1,
++        int alloc_ok = hybris_gralloc_allocate(this->width ? this->width : 1,
++                this->height ? this->height : 1,
+                 this->format, this->usage,
+-                &this->handle, &this->stride);
++                &this->handle, (uint32_t*)&this->stride);
+         assert(alloc_ok == 0);
+         this->youngest = 0;
+         this->common.incRef(&this->common);
+@@ -105,13 +103,11 @@ protected:
+ 
+     ~ClientX11Buffer()
+     {
+-        if (this->m_alloc)
+-            m_alloc->free(m_alloc, this->handle);
++        hybris_gralloc_release(this->handle, 1);
+     }
+ 
+ protected:
+     void* vaddr;
+-    alloc_device_t* m_alloc;
+ 
+ public:
+ 
+@@ -119,8 +115,7 @@ public:
+ 
+ class X11NativeWindow : public BaseNativeWindow {
+ public:
+-    X11NativeWindow(Display* xl_display, Window xl_window, alloc_device_t* alloc,
+-                                  gralloc_module_t* gralloc, bool drihybris);
++    X11NativeWindow(Display* xl_display, Window xl_window, bool drihybris);
+     ~X11NativeWindow();
+ 
+     void lock();
+@@ -194,14 +189,12 @@ private:
+     unsigned int m_defaultHeight;
+     unsigned int m_usage;
+ 
+-    alloc_device_t* m_alloc;
+     pthread_mutex_t mutex;
+     pthread_cond_t cond;
+     int m_queueReads;
+     int m_freeBufs;
+     EGLint *m_damage_rects, m_damage_n_rects;
+     int m_swap_interval;
+-    gralloc_module_t *m_gralloc;
+ };
+ 
+ #endif
+-- 
+2.44.0
+

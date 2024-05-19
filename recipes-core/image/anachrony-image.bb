@@ -8,11 +8,11 @@ IMAGE_INSTALL += " \
 kernel-modules base-files base-passwd systemd busybox iproute2 connman pam-plugin-loginuid bluez5 polkit polkit-group-rule-datetime \
 pulseaudio-server openssh-sshd openssh-sftp-server openssh-scp dsme mce ngfd nfcd resize-rootfs usb-moded ofono sensorfw \
 ${@oe.utils.conditional('MACHINE_HAS_WLAN', 'true', 'iproute2 wpa-supplicant connman-client', '', d)} \
-tomtenisse-misc smartwatch-ui b2g fireplace mir mir-android-platform mesa xcursor-transparent-theme \
+tomtenisse-misc smartwatch-ui b2g fireplace mir mesa xcursor-transparent-theme \
 "
 
 IMAGE_INSTALL:remove:hybris-machine = "mesa"
-IMAGE_INSTALL:append:hybris-machine = " mce-plugin-libhybris "
+IMAGE_INSTALL:append:hybris-machine = " mce-plugin-libhybris mir-android-platform drihybris "
 
 IMAGE_INSTALL:remove = "sensorfw-hybris-hal-plugins asteroid-hrm buteo-mtp"
 
